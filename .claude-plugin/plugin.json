@@ -1,0 +1,10 @@
+{
+  "name": "ruler-engine",
+  "description": "Pluggable rule-injection engine: loads .claude-rules/ruler.yml from target project and injects rules via UserPromptSubmit / PreToolUse hooks. Engine-only, zero business rules.",
+  "version": "0.1.0",
+  "author": {
+    "name": "hufangwei"
+  },
+  "license": "MIT",
+  "keywords": ["rules", "hooks", "ruler", "automation", "claude-code"]
+}

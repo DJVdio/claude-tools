@@ -1,0 +1,11 @@
+version: 1
+rules:
+  - id: rule-1
+    when: always
+    inject: rules/rule-1.md
+  - id: rule-2
+    when: {tool: Edit, file_glob: "**/*.vue"}
+    inject: rules/rule-2.md
+  - id: rule-3
+    when: {tool: Bash, command_regex: "^\\s*mysql"}
+    inject: rules/rule-3.md

@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# Validate .claude-rules/ruler.yml in cwd (or ancestor).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(dirname "$SCRIPT_DIR")"
+# shellcheck source=../lib/ruler-load.sh
+source "$PLUGIN_ROOT/lib/ruler-load.sh"
+
+MAX_ALWAYS=5
+MAX_RULE_FILE_BYTES=500
+
+errors=0
+err() { echo "ERROR: $*" >&2; echo "ERROR: $*"; errors=$((errors+1)); }
+warn() { echo "WARN:  $*" >&2; }
+
+ruler_file="$(find_ruler)" || {
+  echo "ERROR: .claude-rules/ruler.yml not found (searched from $PWD upward)" >&2
+  echo "ERROR: .claude-rules/ruler.yml not found (searched from $PWD upward)"
+  exit 1
+}
+ruler_dir="$(dirname "$ruler_file")"
+
+# 1) YAML parse
+if ! yq eval '.' "$ruler_file" >/dev/null 2>&1; then
+  echo "ERROR: ruler.yml has YAML syntax errors" >&2
+  echo "ERROR: ruler.yml has YAML syntax errors"
+  yq eval '.' "$ruler_file" >/dev/null
+  exit 1
+fi
+
+# 2) version present
+version="$(yq eval '.version // ""' "$ruler_file")"
+[[ "$version" != "1" ]] && err "version must be 1, got '$version'"
+
+# 3) each rule check
+n_rules="$(yq eval '.rules | length' "$ruler_file")"
+[[ "$n_rules" == "null" || "$n_rules" == "0" ]] && err "rules[] is empty"
+
+always_count=0
+for ((i=0; i<n_rules; i++)); do
+  id="$(yq eval ".rules[$i].id // \"\"" "$ruler_file")"
+  inject="$(yq eval ".rules[$i].inject // \"\"" "$ruler_file")"
+  when_type="$(yq eval ".rules[$i].when | type" "$ruler_file")"
+  when_value="$(yq eval ".rules[$i].when" "$ruler_file")"
+
+  [[ -z "$id" ]] && err "rule[$i]: id is required"
+  [[ -z "$inject" ]] && err "rule[$i] ($id): inject is required"
+
+  if [[ -n "$inject" ]] && [[ ! -f "$ruler_dir/$inject" ]]; then
+    err "rule[$i] ($id): inject file not found: $inject"
+  fi
+
+  # inject file size check
+  if [[ -f "$ruler_dir/$inject" ]]; then
+    size="$(wc -c < "$ruler_dir/$inject")"
+    (( size > MAX_RULE_FILE_BYTES )) && warn "rule[$i] ($id): rule file >$MAX_RULE_FILE_BYTES bytes ($size)"
+  fi
+
+  # when validation
+  case "$when_type" in
+    "!!str")
+      [[ "$when_value" != "always" ]] && err "rule[$i] ($id): when string must be 'always', got '$when_value'"
+      [[ "$when_value" == "always" ]] && always_count=$((always_count+1))
+      ;;
+    "!!map")
+      # single condition object - validate fields
+      c_tool="$(yq eval ".rules[$i].when.tool // \"\"" "$ruler_file")"
+      c_glob="$(yq eval ".rules[$i].when.file_glob // \"\"" "$ruler_file")"
+      c_regex="$(yq eval ".rules[$i].when.command_regex // \"\"" "$ruler_file")"
+      [[ -z "$c_tool" ]] && err "rule[$i] ($id): when.tool required"
+      [[ -n "$c_glob" && -n "$c_regex" ]] && err "rule[$i] ($id): file_glob and command_regex are mutually exclusive"
+      if [[ -n "$c_glob" && "$c_tool" == "Bash" ]]; then
+        err "rule[$i] ($id): Bash tool cannot use file_glob (use command_regex)"
+      fi
+      if [[ -n "$c_regex" && "$c_tool" != "Bash" ]]; then
+        err "rule[$i] ($id): command_regex only valid with Bash"
+      fi
+      ;;
+    "!!seq")
+      # array - each element must be object; 'always' literal not allowed in array
+      n_conds="$(yq eval ".rules[$i].when | length" "$ruler_file")"
+      for ((j=0; j<n_conds; j++)); do
+        ct="$(yq eval ".rules[$i].when[$j] | type" "$ruler_file")"
+        if [[ "$ct" != "!!map" ]]; then
+          err "rule[$i] ($id): when[$j] must be an object (cannot mix 'always' with conditions)"
+        fi
+      done
+      ;;
+    *)
+      err "rule[$i] ($id): when has invalid type $when_type"
+      ;;
+  esac
+done
+
+(( always_count > MAX_ALWAYS )) && err "too many 'when: always' rules ($always_count > $MAX_ALWAYS)"
+
+if (( errors > 0 )); then
+  echo "ruler-engine-lint: $errors error(s)" >&2
+  echo "ruler-engine-lint: $errors error(s)"
+  exit 1
+fi
+
+echo "ruler-engine-lint: OK ($n_rules rules, $always_count always)"

@@ -1,0 +1,19 @@
+# .claude-rules/ruler.yml —— copy to your project root's .claude-rules/
+version: 1
+rules:
+  # Example: always-active reminder
+  - id: project-overview
+    when: always
+    inject: rules/project-overview.md
+
+  # Example: Vue file line width
+  - id: vue-line-width
+    when: {tool: Edit, file_glob: "**/*.vue"}
+    inject: rules/vue-line-width.md
+
+  # Example: SQL + mysql double-coverage
+  - id: db-caution
+    when:
+      - {tool: Edit, file_glob: "**/*.sql"}
+      - {tool: Bash, command_regex: "^\\s*mysql"}
+    inject: rules/db-caution.md

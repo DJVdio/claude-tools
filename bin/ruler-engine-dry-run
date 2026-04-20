@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Dry-run: simulate hook invocation for a given tool/file/command.
+# Usage:
+#   ruler-engine-dry-run --always                                  # run UserPromptSubmit path
+#   ruler-engine-dry-run --tool=Edit --file=src/App.vue            # run PreToolUse path
+#   ruler-engine-dry-run --tool=Bash --command="mysql -u root"
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(dirname "$SCRIPT_DIR")"
+
+mode=""
+tool=""
+file=""
+cmd=""
+for arg in "$@"; do
+  case "$arg" in
+    --always) mode="always" ;;
+    --tool=*) tool="${arg#--tool=}"; mode="tool" ;;
+    --file=*) file="${arg#--file=}" ;;
+    --command=*) cmd="${arg#--command=}" ;;
+    *) echo "unknown arg: $arg" >&2; exit 2 ;;
+  esac
+done
+
+if [[ "$mode" == "always" ]]; then
+  exec "$PLUGIN_ROOT/hooks/on-user-prompt.sh"
+elif [[ "$mode" == "tool" ]]; then
+  json="$(jq -n \
+    --arg tool "$tool" \
+    --arg file "$file" \
+    --arg cmd "$cmd" \
+    '{tool_name:$tool, tool_input: ({} + (if $file != "" then {file_path:$file} else {} end) + (if $cmd != "" then {command:$cmd} else {} end))}')"
+  echo "$json" | exec "$PLUGIN_ROOT/hooks/on-pre-tool.sh"
+else
+  echo "Usage: ruler-engine-dry-run [--always | --tool=X [--file=Y] [--command=Z]]" >&2
+  exit 2
+fi
