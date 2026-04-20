@@ -10,7 +10,8 @@ __pycache__/
 venv/
 
 # Sensitive user data (never commit)
-skills/archive-ops/data/archives/
+skills/archive-ops/data/archives/*
+!skills/archive-ops/data/archives/.gitkeep
 skills/archive-ops/data/index.json
 skills/db-ops/audit.log
 skills/db-ops/config.yml
