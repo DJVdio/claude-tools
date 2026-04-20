@@ -1,0 +1,8 @@
+version: 1
+rules:
+  - id: rule-x
+    when:
+      - {tool: Edit, file_glob: "src/chat/**"}
+      - {tool: Edit, file_glob: "**/*.sql"}
+      - {tool: Bash, command_regex: "^\\s*mysql"}
+    inject: rules/rule-x.md

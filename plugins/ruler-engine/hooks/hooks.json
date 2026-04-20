@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/on-user-prompt.sh\"",
+            "async": false,
+            "timeout": 1000
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/on-pre-tool.sh\"",
+            "async": false,
+            "timeout": 1000
+          }
+        ]
+      }
+    ]
+  }
+}
