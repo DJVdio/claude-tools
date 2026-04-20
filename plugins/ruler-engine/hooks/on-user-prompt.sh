@@ -14,20 +14,18 @@ ruler_dir="$(dirname "$ruler_file")"
 always_rules="$(get_always_rules "$ruler_file")"
 [[ -z "$always_rules" ]] && exit 0
 
-# Build injection
+# Build injection. Compact wrapper to minimize per-turn token overhead;
+# rule body is emitted verbatim so users keep full control over content.
 {
-  echo "<ruler-reminder>"
-  echo "以下是 .claude-rules/ 中声明的常驻规则，请始终遵守："
-  echo ""
+  echo "<critical-rules>"
   while IFS=$'\t' read -r id inject; do
     [[ -z "$id" ]] && continue
-    echo "=== $id (from $inject) ==="
+    echo "⚠ $id"
     if [[ -f "$ruler_dir/$inject" ]]; then
       cat "$ruler_dir/$inject"
     else
-      echo "(missing file: $inject)"
+      echo "(missing: $inject)"
     fi
-    echo ""
   done <<< "$always_rules"
-  echo "</ruler-reminder>"
+  echo "</critical-rules>"
 }

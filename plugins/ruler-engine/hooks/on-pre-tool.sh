@@ -59,20 +59,16 @@ done < <(get_tool_rules "$ruler_file")
 
 [[ "${#matched_ids[@]}" -eq 0 ]] && exit 0
 
-# Emit injection
+# Emit injection. Compact wrapper — tool attr conveys context; body verbatim.
 {
-  ids_csv="$(IFS=,; echo "${matched_ids[*]}")"
-  echo "<ruler-reminder tool=\"$tool_name\" match=\"$ids_csv\">"
-  echo "Claude 即将调用 $tool_name 工具，以下规则适用："
-  echo ""
+  echo "<critical-rules tool=\"$tool_name\">"
   for i in "${!matched_ids[@]}"; do
-    echo "=== ${matched_ids[$i]} (from ${matched_paths[$i]}) ==="
+    echo "⚠ ${matched_ids[$i]}"
     if [[ -f "$ruler_dir/${matched_paths[$i]}" ]]; then
       cat "$ruler_dir/${matched_paths[$i]}"
     else
-      echo "(missing file: ${matched_paths[$i]})"
+      echo "(missing: ${matched_paths[$i]})"
     fi
-    echo ""
   done
-  echo "</ruler-reminder>"
+  echo "</critical-rules>"
 }

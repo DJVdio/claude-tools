@@ -11,7 +11,7 @@ setup() {
   input='{"tool_name":"Edit","tool_input":{"file_path":"src/App.vue"}}'
   run bash -c "echo '$input' | '$PLUGIN_ROOT/hooks/on-pre-tool.sh'"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"<ruler-reminder"* ]]
+  [[ "$output" == *"<critical-rules"* ]]
   [[ "$output" == *"rule-2"* ]]
   [[ "$output" == *"keep line width"* ]]
 }
