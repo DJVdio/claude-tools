@@ -1,0 +1,154 @@
+# config.example.yml
+# ============================================================================
+# 研发全流程 Skills 的可选配置文件（示例）
+#
+# 使用方法：
+#   1. 复制本文件为同目录下的 `config.yml`：
+#          cp config.example.yml config.yml
+#   2. **在使用前务必修改下面的占位值**（默认全部为 <auto-detect>，复制后不改直接用会错绑栈）。
+#      只保留需要覆盖的项即可，其余删除或保持 <auto-detect> → 自动回退到
+#      `_shared/project-adapter.md` 的运行时自动探测。
+#   3. 本文件（`config.example.yml`）仅作模板存在，**不会被任何 skill 读取**；
+#      只有当 `.claude/skills/config.yml` 存在时配置才会生效。
+#
+# 适用对象：
+#   - 自动探测结果与实际项目不一致（多后端单仓 / 非主流目录命名 / 异构测试目录）
+#   - 想持久化 Preflight 交互结果，避免每次重问
+#   - CI / 团队协作需要显式固定约定
+#
+# 设计约束：
+#   - 所有键值"仅覆盖自动探测"；留空（或写 `<auto-detect>`）即 fallback。
+#   - 路径相对于 `<project-root>`（即 `.claude/` 所在目录）。
+#   - 变量命名必须与 `_shared/project-adapter.md` Part 4 对齐：
+#       paths.product        → product_dir
+#       paths.frontend       → frontend_dir
+#       paths.backend        → backend_dir
+#       paths.test           → test_dir
+#       paths.requirements   → requirements_dir
+#       stack.backend        → backend_stack
+#       stack.frontend       → frontend_stack
+#       stack.test-backend   → test_backend_stack
+#       stack.test-frontend  → test_frontend_stack
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# paths — 目录约定（覆盖 project-adapter Part 1 的自动发现）
+#
+# 覆盖示例（按需取消注释并按本项目实际结构改写）：
+#   - 单仓常规：product / frontend / backend / test / product/requirements
+#   - monorepo：apps/web / apps/server / qa / prd
+#   - 文档优先：docs / docs/specs / ...（注意 docs/ 优先级低于 prd/ specs/）
+# 留 <auto-detect> 即由 Preflight 自动探测；不确定时建议留空。
+# ----------------------------------------------------------------------------
+paths:
+  product: <auto-detect>           # 产品文档根目录
+  frontend: <auto-detect>          # 前端代码目录；纯后端项目改为 N/A
+  backend: <auto-detect>           # 后端代码目录；纯前端项目改为 N/A
+  test: <auto-detect>              # 测试根目录；内嵌测试改为 N/A
+  requirements: <auto-detect>      # 子需求聚合目录（全生命周期产物存放处）
+
+# ----------------------------------------------------------------------------
+# stack — 技术栈（覆盖 project-adapter Part 2 的自动识别）
+# 所有取值必须来自 project-adapter.md Part 4 的合法枚举。
+# 留 <auto-detect> 即由 Preflight 自动探测；自动探测失败时会 ask。
+# ----------------------------------------------------------------------------
+stack:
+  # 后端主栈合法值（来自 project-adapter Part 4.2）：
+  #   java-maven / java-gradle / java-spring / java-spring-gradle / kotlin-gradle / kotlin-spring
+  #   node-express / node-koa / node-fastify / node-nest
+  #   python / python-fastapi / python-django / python-flask
+  #   go / go-gin / go-echo / go-fiber
+  #   rust / rust-actix / rust-axum / rust-rocket
+  #   dotnet / dotnet-aspnet
+  #   ruby / ruby-rails / ruby-sinatra
+  #   php / php-laravel / php-symfony / php-slim
+  #   elixir / elixir-phoenix
+  #   scala / scala-play / scala-akka
+  #   deno / bun / bun-elysia
+  #   N/A（纯前端项目）/ pending（目录存在但待建设）
+  backend: <auto-detect>
+
+  # 前端主栈合法值（来自 project-adapter Part 4.2）：
+  #   vue / vue-ts / nuxt
+  #   react / react-ts / next / remix
+  #   svelte / sveltekit
+  #   angular
+  #   solid / solid-start
+  #   qwik / astro / preact
+  #   N/A（纯后端项目）/ pending（目录存在但待建设）
+  frontend: <auto-detect>
+
+  # 后端测试栈合法值（来自 project-adapter Part 4.2）：
+  #   junit5+restassured              （Java）
+  #   jest+supertest / vitest+supertest / mocha+chai+supertest  （Node）
+  #   pytest+httpx / pytest+requests / pytest+respx             （Python）
+  #   go-test                                                   （Go 原生）
+  #   cargo-test                                                （Rust 原生）
+  #   xunit / nunit / mstest                                    （.NET）
+  #   rspec+rack-test                                           （Ruby）
+  #   phpunit / phpunit+laravel-test                            （PHP）
+  #   exunit                                                    （Elixir）
+  #   scalatest                                                 （Scala）
+  # 注意：本字段允许与 backend 异构（如后端 Node + 测试目录用 pytest）。
+  # 留 <auto-detect>，Preflight 会先扫 <test-dir> 实际文件后缀再回落到后端栈推导。
+  test-backend: <auto-detect>
+
+  # 前端测试栈合法值（来自 project-adapter Part 4.2）：
+  #   vitest / jest / karma+jasmine
+  # 附加识别（可作 `<stack>+testing-library` 后缀）：
+  #   含 @testing-library/* → vitest+testing-library / jest+testing-library / ...
+  test-frontend: <auto-detect>
+
+  # ---- 执行目录（cwd）覆盖 ----
+  # 默认情况：backend_cwd = paths.backend / frontend_cwd = paths.frontend / test_cwd = paths.test
+  # 仅在 monorepo / 异构测试目录场景需要显式指定，覆盖默认推导：
+  # backend_cwd: <auto-detect>     # 例如 monorepo 下后端运行根 = "apps/server"
+  # frontend_cwd: <auto-detect>    # 例如 monorepo 下前端运行根 = "apps/web"
+  # test_cwd: <auto-detect>        # 异构测试栈（如 Node 后端 + 独立 pytest qa/）必须显式指定 = "qa"
+
+# ----------------------------------------------------------------------------
+# options — 流程控制参数
+# 键名必须与各 skill 对应位置一致，便于下游 skill 直读。
+# 留空或缺失即用各 skill 的默认值。
+# ----------------------------------------------------------------------------
+options:
+  self-review-max-rounds: 3              # fullstack-builder/self-review loop 最大轮次（默认 3）
+  test-fix-max-rounds: 3                 # test-runner 脚本修正 loop 最大轮次（默认 3）
+  feasibility-read-max-files: 5          # feasibility-assessor 读文件上限（默认 5；硬上限）
+  automation_strategy: per-requirement   # test-runner 的 automation/ 位置策略：
+                                         #   per-requirement（默认）→ <target-requirement-dir>/automation/
+                                         #   centralized            → <test-dir>/<编号>-<功能名>/
+
+# ----------------------------------------------------------------------------
+# 示例配置（取消注释作为模板参考）
+# ----------------------------------------------------------------------------
+# 示例 1：典型 Java/Spring + Vue 单仓
+# paths:
+#   product: product
+#   frontend: frontend
+#   backend: backend
+#   test: test
+#   requirements: product/requirements
+# stack:
+#   backend: java-spring
+#   frontend: vue-ts
+#   test-backend: junit5+restassured
+#   test-frontend: vitest
+
+# 示例 2：Node monorepo + React + 独立 pytest 测试目录
+# paths:
+#   product: prd
+#   frontend: apps/web
+#   backend: apps/server
+#   test: qa
+#   requirements: prd/requirements
+# stack:
+#   backend: node-express
+#   frontend: react-ts
+#   test-backend: pytest+httpx       # 测试栈与后端栈异构
+#   test-frontend: vitest+testing-library
+#   backend_cwd: apps/server         # monorepo 必显式
+#   frontend_cwd: apps/web           # 同上
+#   test_cwd: qa                     # 异构测试栈必显式
+# options:
+#   automation_strategy: centralized  # 复用 qa/ 下已有 fixture

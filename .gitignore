@@ -15,6 +15,7 @@ skills/archive-ops/data/archives/*
 skills/archive-ops/data/index.json
 skills/db-ops/audit.log
 skills/db-ops/config.yml
+skills/dev-workflow/config.yml
 
 # ruler-engine dev artifacts
 plugins/ruler-engine/tests/fixtures/scratch/
