@@ -1,0 +1,44 @@
+# archive-ops 同义词字典
+# 格式：canonical_slug: [同义词列表]
+# Claude 归档/读档抽 tag 时，先在此字典里查同义词归一成 canonical_slug
+# 新词：先抽再人工补进此字典 → 下次抽取稳定
+
+# -------- problems --------
+deadlock: [死锁, lock wait, lock timeout, DeadlockLoserDataAccessException, 锁等待超时]
+n-plus-one: [N+1, N加1, 循环查询, loop query, 一次查询多次执行]
+duplicate-key: [DuplicateKeyException, 唯一键冲突, unique violation, 主键冲突]
+silent-failure: [静默失败, 无日志失败, swallow exception, 空 catch, ignored catch]
+race-condition: [竞态, race, 并发竞争, concurrent modification]
+index-miss: [索引未命中, 索引失效, 全表扫描, full scan, index not used]
+memory-leak: [内存泄漏, OOM, memory leak, 泄露]
+long-tx: [长事务, 事务过长, 事务肥, 事务时间久]
+
+# -------- solutions --------
+add-index: [加索引, 新增索引, create index, add index, 补索引]
+drop-index: [删索引, 删除索引, drop index]
+unique-constraint: [唯一约束, unique, 改唯一键]
+after-commit: [afterCommit, 事务提交后回调, TransactionSynchronization, 事务后异步]
+synchronized-session: [synchronized session, 会话锁, 串行化写入]
+batch-query: [批量查, 批量查询, batch select, IN 批量, 合并查询]
+retry-backoff: [指数退避, 重试退避, exponential backoff, 重试]
+async-flush: [异步刷新, 异步落库, async flush, 异步合并]
+tx-shrink: [事务瘦身, 缩事务, 收窄事务边界, tx scope shrink]
+
+# -------- tech --------
+mysql: [MySQL, mysql, 数据库]
+redis: [Redis, redis, 缓存]
+mybatis-plus: [MyBatis-Plus, MyBatisPlus, MP, mybatis]
+vue: [Vue, Vue 3, vue3]
+spring-tx: [Spring 事务, @Transactional, spring-tx]
+websocket-protocol: [WebSocket, WS, ws]
+java-concurrent: [java 并发, Thread, ExecutorService, 线程池]
+
+# -------- modules（业务模块）--------
+ticket: [工单, asms_ticket, 工单系统]
+message: [消息, asms_ticket_message, 聊天消息]
+websocket: [WebSocket 模块, ws 模块, 推送]
+permission: [权限, 菜单权限, 角色]
+bi: [BI, 看板, 统计, 监管中心]
+agent-plugin: [Agent 插件, 插件, plugin]
+supervision: [监管中心, supervision]
+quality-check: [质检, quality, 评分]

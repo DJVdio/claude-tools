@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Sensitive user data (never commit)
+skills/archive-ops/data/archives/
+skills/archive-ops/data/index.json
+skills/db-ops/audit.log
+skills/db-ops/config.yml
+
+# ruler-engine dev artifacts
+plugins/ruler-engine/tests/fixtures/scratch/

@@ -1,0 +1,126 @@
+# db-ops/config.example.yml
+# ============================================================================
+# db-ops skill 的可选配置文件(示例)
+#
+# 使用方法:
+#   1. 复制本文件为同目录下的 `config.yml`:
+#          cp config.example.yml config.yml
+#   2. **必须修改 environments 块的真实连接参数**(默认值是占位符,
+#      不修改直连测试库会失败)。
+#   3. 本文件(`config.example.yml`)仅作模板,**不会被 db_ops.py 读取**;
+#      只有 `config.yml` 存在时配置才生效。
+#   4. 兼容性:若 `config.yml` 不存在,db_ops.py 回退读 application-test.yaml
+#      (即旧行为),保证存量项目不破坏。
+#
+# 适用场景:
+#   - 跨项目复用本 skill(workflow 项目用 Spring,新项目用 Node/Django/.NET)
+#   - 同一项目多 ENV(test/staging/prod)需要分别配置
+#   - 团队协作显式固定连接来源,避免每次重问
+#
+# 设计约束:
+#   - environments 是必填,test/prod 两个键缺一不可
+#   - prod 的 direct_execute 必须为 false(强制护栏,代码层也会拒绝)
+#   - dialect 当前仅支持 mysql;留 postgres/sqlite 是占位,未实现方言适配
+# ============================================================================
+
+environments:
+  # --------------------------------------------------------------------------
+  # TEST 环境 — 直连执行,用于本地/测试库
+  # --------------------------------------------------------------------------
+  test:
+    label: "🧪 测试服"        # banner 上显示的环境名
+    dialect: mysql           # mysql(已实现) | postgres/sqlite(占位,未实现)
+    direct_execute: true     # TEST 必须 true,否则 skill 失去存在意义
+
+    # 连接参数来源,3 选 1:
+    #   - source: spring-yaml      读取 Spring Boot YAML 的 spring.datasource.dynamic.datasource.master
+    #   - source: dotenv           读取 .env 文件(键名约定见下)
+    #   - source: explicit         直接在本文件填 host/port/user/password/db
+    connection:
+      source: spring-yaml
+      path: <auto-detect>    # spring-yaml 模式:application*.yaml 路径;留 <auto-detect> 自动扫
+                             # dotenv 模式:.env 路径
+                             # explicit 模式:此字段忽略
+      # explicit 模式额外字段(留空示例):
+      # host: 127.0.0.1
+      # port: 3306
+      # user: root
+      # password: <env:DB_PASSWORD>   # 支持 <env:VAR_NAME> 语法读环境变量
+      # db: my_database
+
+  # --------------------------------------------------------------------------
+  # PROD 环境 — 永不直连,仅渲染 SQL 文本
+  # --------------------------------------------------------------------------
+  prod:
+    label: "🔥 正式服"
+    dialect: mysql
+    direct_execute: false    # PROD 永远 false,代码层强制
+    sql_executor_tool: "DMS https://dms.aliyun.com/"   # banner 上提示用户去哪执行
+    rollback_hint: "binlog"  # mysql=binlog | postgres=WAL | other=按 DBA 流程
+
+# ----------------------------------------------------------------------------
+# options — 通用流程参数
+# ----------------------------------------------------------------------------
+options:
+  audit_log_enabled: true                       # 是否记录 audit log(强烈建议 true)
+  audit_log_path: <auto-detect>                 # 默认 <SKILL_DIR>/audit.log;支持绝对路径
+  exec_max_rows: 2000                           # SELECT 返回截断行数(rows[:N])
+  display_max_rows: 50                          # banner 表格最多展示行数(超出标"还有 N 行")
+  dry_run_sample_rows: 20                       # DELETE 转 SELECT 样本上限
+  large_select_warn_rows: 1000000               # EXPLAIN 估算超此值时,banner 加红字警告
+
+# ----------------------------------------------------------------------------
+# 示例配置(取消注释作为模板参考)
+# ----------------------------------------------------------------------------
+# 示例 1:Spring Boot 项目(asms 当前用法)
+# environments:
+#   test:
+#     label: "🧪 测试服 (asms)"
+#     dialect: mysql
+#     direct_execute: true
+#     connection:
+#       source: spring-yaml
+#       path: /Users/hufangwei/asms/asms_backend/yshop-server/src/main/resources/application-test.yaml
+#   prod:
+#     label: "🔥 正式服 (asms PROD)"
+#     dialect: mysql
+#     direct_execute: false
+#     sql_executor_tool: "DMS https://dms.aliyun.com/"
+#     rollback_hint: binlog
+
+# 示例 2:Node 项目 + .env 配置
+# environments:
+#   test:
+#     label: "🧪 本地测试库"
+#     dialect: mysql
+#     direct_execute: true
+#     connection:
+#       source: dotenv
+#       path: .env
+#       # 期望 .env 中存在键:DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME
+#   prod:
+#     label: "🔥 生产库 (Bytebase)"
+#     dialect: mysql
+#     direct_execute: false
+#     sql_executor_tool: "Bytebase https://bytebase.example.com/"
+#     rollback_hint: binlog
+
+# 示例 3:显式参数(适合 SQLite/小项目)
+# environments:
+#   test:
+#     label: "🧪 本地 dev"
+#     dialect: mysql
+#     direct_execute: true
+#     connection:
+#       source: explicit
+#       host: 127.0.0.1
+#       port: 3306
+#       user: dev
+#       password: <env:DB_PASSWORD>
+#       db: app_dev
+#   prod:
+#     label: "🔥 PROD"
+#     dialect: mysql
+#     direct_execute: false
+#     sql_executor_tool: "手动执行(请联系 DBA)"
+#     rollback_hint: "按 DBA 流程"
