@@ -21,10 +21,7 @@ find_ruler() {
 #   Print tab-separated "<id>\t<inject_path>" for each rule with when=always.
 get_always_rules() {
   local file="$1"
-  yq eval -o=json '.rules[] | select(.when == "always") | [.id, .inject] | @tsv' "$file" 2>/dev/null \
-    | sed 's/^"//;s/"$//' \
-    | sed 's/\\t/\t/g' \
-    | grep -v '^$' || true
+  yq eval '.rules[] | select(.when == "always") | .id + "\t" + .inject' "$file" 2>/dev/null
 }
 
 # glob_match <glob> <path>

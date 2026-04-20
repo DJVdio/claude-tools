@@ -57,6 +57,40 @@ YAML
   [[ "$output" == *"always"* ]]
 }
 
+@test "lint: catches array-form Bash with file_glob" {
+  mkdir -p "$TMP/.claude-rules/rules"
+  touch "$TMP/.claude-rules/rules/r.md"
+  cat >"$TMP/.claude-rules/ruler.yml" <<'YAML'
+version: 1
+rules:
+  - id: r1
+    when:
+      - {tool: Bash, file_glob: "*.sh"}
+    inject: rules/r.md
+YAML
+  cd "$TMP"
+  run "$LINT"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"file_glob"* ]]
+}
+
+@test "lint: catches array-form condition missing tool" {
+  mkdir -p "$TMP/.claude-rules/rules"
+  touch "$TMP/.claude-rules/rules/r.md"
+  cat >"$TMP/.claude-rules/ruler.yml" <<'YAML'
+version: 1
+rules:
+  - id: r1
+    when:
+      - {file_glob: "*.vue"}
+    inject: rules/r.md
+YAML
+  cd "$TMP"
+  run "$LINT"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"tool required"* ]]
+}
+
 @test "lint: fails on mixed when array with 'always' literal" {
   mkdir -p "$TMP/.claude-rules/rules"
   touch "$TMP/.claude-rules/rules/r.md"

@@ -14,6 +14,24 @@ errors=0
 err() { echo "ERROR: $*" >&2; echo "ERROR: $*"; errors=$((errors+1)); }
 warn() { echo "WARN:  $*" >&2; }
 
+# validate_when_map <rule_idx> <id> <yq_path>
+#   Validate a single condition object at the given yq path inside ruler_file.
+validate_when_map() {
+  local idx="$1" id="$2" path="$3"
+  local c_tool c_glob c_regex
+  c_tool="$(yq eval "$path.tool // \"\"" "$ruler_file")"
+  c_glob="$(yq eval "$path.file_glob // \"\"" "$ruler_file")"
+  c_regex="$(yq eval "$path.command_regex // \"\"" "$ruler_file")"
+  [[ -z "$c_tool" ]] && err "rule[$idx] ($id) $path: tool required"
+  [[ -n "$c_glob" && -n "$c_regex" ]] && err "rule[$idx] ($id) $path: file_glob and command_regex are mutually exclusive"
+  if [[ -n "$c_glob" && "$c_tool" == "Bash" ]]; then
+    err "rule[$idx] ($id) $path: Bash tool cannot use file_glob (use command_regex)"
+  fi
+  if [[ -n "$c_regex" && "$c_tool" != "Bash" ]]; then
+    err "rule[$idx] ($id) $path: command_regex only valid with Bash"
+  fi
+}
+
 ruler_file="$(find_ruler)" || {
   echo "ERROR: .claude-rules/ruler.yml not found (searched from $PWD upward)" >&2
   echo "ERROR: .claude-rules/ruler.yml not found (searched from $PWD upward)"
@@ -64,18 +82,7 @@ for ((i=0; i<n_rules; i++)); do
       [[ "$when_value" == "always" ]] && always_count=$((always_count+1))
       ;;
     "!!map")
-      # single condition object - validate fields
-      c_tool="$(yq eval ".rules[$i].when.tool // \"\"" "$ruler_file")"
-      c_glob="$(yq eval ".rules[$i].when.file_glob // \"\"" "$ruler_file")"
-      c_regex="$(yq eval ".rules[$i].when.command_regex // \"\"" "$ruler_file")"
-      [[ -z "$c_tool" ]] && err "rule[$i] ($id): when.tool required"
-      [[ -n "$c_glob" && -n "$c_regex" ]] && err "rule[$i] ($id): file_glob and command_regex are mutually exclusive"
-      if [[ -n "$c_glob" && "$c_tool" == "Bash" ]]; then
-        err "rule[$i] ($id): Bash tool cannot use file_glob (use command_regex)"
-      fi
-      if [[ -n "$c_regex" && "$c_tool" != "Bash" ]]; then
-        err "rule[$i] ($id): command_regex only valid with Bash"
-      fi
+      validate_when_map "$i" "$id" ".rules[$i].when"
       ;;
     "!!seq")
       # array - each element must be object; 'always' literal not allowed in array
@@ -84,7 +91,9 @@ for ((i=0; i<n_rules; i++)); do
         ct="$(yq eval ".rules[$i].when[$j] | type" "$ruler_file")"
         if [[ "$ct" != "!!map" ]]; then
           err "rule[$i] ($id): when[$j] must be an object (cannot mix 'always' with conditions)"
+          continue
         fi
+        validate_when_map "$i" "$id" ".rules[$i].when[$j]"
       done
       ;;
     *)
