@@ -39,6 +39,6 @@ setup() {
   # src/chat/foo.sql matches both cond-1 (src/chat/**) and cond-2 (**/*.sql)
   input='{"tool_name":"Edit","tool_input":{"file_path":"src/chat/foo.sql"}}'
   run bash -c "echo '$input' | '$PLUGIN_ROOT/hooks/on-pre-tool.sh'"
-  count="$(echo "$output" | grep -c '=== rule-x')"
+  count="$(echo "$output" | grep -c '⚠ rule-x')"
   [ "$count" -eq 1 ]
 }
