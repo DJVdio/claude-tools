@@ -19,6 +19,7 @@ for arg in "$@"; do
     --tool=*) tool="${arg#--tool=}"; mode="tool" ;;
     --file=*) file="${arg#--file=}" ;;
     --command=*) cmd="${arg#--command=}" ;;
+    --sources) mode="sources" ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
@@ -32,7 +33,35 @@ elif [[ "$mode" == "tool" ]]; then
     --arg cmd "$cmd" \
     '{tool_name:$tool, tool_input: ({} + (if $file != "" then {file_path:$file} else {} end) + (if $cmd != "" then {command:$cmd} else {} end))}')"
   echo "$json" | exec "$PLUGIN_ROOT/hooks/on-pre-tool.sh"
+elif [[ "$mode" == "sources" ]]; then
+  # shellcheck source=../lib/ruler-load.sh
+  source "$PLUGIN_ROOT/lib/ruler-load.sh"
+  project_ruler="$(find_ruler 2>/dev/null || true)"
+  echo "Discovered sources:"
+  if [[ -n "$project_ruler" ]]; then
+    printf '  %-20s %s\n' "project" "$project_ruler"
+    opt_in="$(project_load_plugin_sources "$project_ruler")"
+    if [[ "$opt_in" == "true" ]]; then
+      while IFS=$'\t' read -r ns ruler; do
+        [[ -z "$ns" ]] && continue
+        printf '  %-20s %s\n' "$ns" "$ruler"
+      done < <(find_plugin_sources)
+    else
+      echo "  (load_plugin_sources: false — plugin sources skipped;"
+      echo "   RULER_EXTRA_SOURCES, if set, still applies)"
+    fi
+  else
+    echo "  (no project .claude-rules/ruler.yml found)"
+  fi
+  # Always show env-var sources regardless of project opt-in
+  if [[ -n "${RULER_EXTRA_SOURCES:-}" ]]; then
+    echo "  env-override sources:"
+    IFS=',' read -ra _entries <<< "$RULER_EXTRA_SOURCES"
+    for _e in "${_entries[@]}"; do
+      printf '    %-20s %s\n' "${_e%%:*}" "${_e#*:}"
+    done
+  fi
 else
-  echo "Usage: ruler-engine-dry-run [--always | --tool=X [--file=Y] [--command=Z]]" >&2
+  echo "Usage: ruler-engine-dry-run [--always | --tool=X [--file=Y] [--command=Z] | --sources]" >&2
   exit 2
 fi
