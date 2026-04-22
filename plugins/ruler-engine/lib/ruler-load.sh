@@ -79,3 +79,19 @@ get_tool_rules() {
   local file="$1"
   yq eval -o=json -I=0 '.rules[] | select(.when != "always")' "$file" 2>/dev/null || true
 }
+
+# get_installed_plugins
+#   Emit tab-separated "<plugin_name>\t<install_path>" for each installed plugin.
+#   Plugin name = map key without the "@marketplace" suffix.
+#   Returns 0 with empty output when installed_plugins.json is missing.
+get_installed_plugins() {
+  local f="$HOME/.claude/plugins/installed_plugins.json"
+  [[ -f "$f" ]] || return 0
+  jq -r '
+    .plugins // {} | to_entries[]
+    | .key as $k
+    | (.value[0].installPath // "") as $p
+    | select($p != "")
+    | ($k | split("@")[0]) + "\t" + $p
+  ' "$f" 2>/dev/null || true
+}
