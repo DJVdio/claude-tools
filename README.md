@@ -93,7 +93,10 @@ python3 -m pytest tests/ -v
 **安装**（纯 SKILL.md，零依赖）：
 
 ```bash
+cd /path/to/claude-tools   # 先进入本仓库根目录（$PWD 才会指对）
 ln -s "$PWD/skills/large-file-write" ~/.claude/skills/large-file-write
+# 或直接写死绝对路径:
+#   ln -s /Users/<you>/claude-tools/skills/large-file-write ~/.claude/skills/large-file-write
 ```
 
 触发方式：Claude 遇到写大文件场景或收到 socket 错误时自动命中；也可直接说"用分片写 xxx.html"。
