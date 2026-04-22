@@ -95,3 +95,34 @@ get_installed_plugins() {
     | ($k | split("@")[0]) + "\t" + $p
   ' "$f" 2>/dev/null || true
 }
+
+# find_plugin_sources
+#   Emit tab-separated "<namespace>\t<ruler_yml_path>" for each installed plugin
+#   whose plugin.json has "ruler": true AND has claude-rules/ruler.yml on disk.
+#   Also honors $RULER_EXTRA_SOURCES (comma-separated "ns:path" pairs).
+find_plugin_sources() {
+  while IFS=$'\t' read -r name path; do
+    [[ -z "$name" || -z "$path" ]] && continue
+    local manifest="$path/.claude-plugin/plugin.json"
+    local ruler="$path/claude-rules/ruler.yml"
+    [[ ! -f "$manifest" || ! -f "$ruler" ]] && continue
+    local flag
+    flag="$(jq -r '.ruler // false' "$manifest" 2>/dev/null)"
+    [[ "$flag" == "true" ]] || continue
+    printf '%s\t%s\n' "$name" "$ruler"
+  done < <(get_installed_plugins)
+
+  # Env-var injected sources (dev escape hatch)
+  if [[ -n "${RULER_EXTRA_SOURCES:-}" ]]; then
+    local IFS_OLD="$IFS"
+    IFS=','
+    for entry in $RULER_EXTRA_SOURCES; do
+      IFS="$IFS_OLD"
+      local ns="${entry%%:*}"
+      local path="${entry#*:}"
+      [[ -z "$ns" || -z "$path" || ! -f "$path" ]] && continue
+      printf '%s\t%s\n' "$ns" "$path"
+    done
+    IFS="$IFS_OLD"
+  fi
+}
