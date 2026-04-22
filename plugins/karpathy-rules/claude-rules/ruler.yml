@@ -1,0 +1,19 @@
+version: 1
+rules:
+  - id: think-before-coding
+    when: always
+    inject: rules/think-before-coding.md
+
+  - id: simplicity-first
+    when:
+      - {tool: Edit}
+      - {tool: Write}
+    inject: rules/simplicity-first.md
+
+  - id: surgical-changes
+    when: {tool: Edit}
+    inject: rules/surgical-changes.md
+
+  - id: goal-driven-execution
+    when: always
+    inject: rules/goal-driven-execution.md
