@@ -35,6 +35,49 @@ ruler-engine-lint
 - **`when: {tool: Edit, file_glob: "**/*.vue"}`** → injected when Claude is about to Edit a .vue file
 - **`when: [{...}, {...}]`** → OR of conditions; any match triggers injection
 
+## Plugin Sources (0.2.0+)
+
+Third-party plugins can ship rules that load alongside your project's `.claude-rules/`. Two opt-in gates protect you from unexpected prompt injection:
+
+### Plugin-side (author)
+
+```json
+// .claude-plugin/plugin.json
+{ "name": "my-rules", "ruler": true, ... }
+```
+
+Place rules at `<plugin-root>/claude-rules/ruler.yml` + `claude-rules/rules/*.md`.
+
+### Project-side (consumer)
+
+```yaml
+# .claude-rules/ruler.yml
+version: 1
+load_plugin_sources: true   # opt-in
+disable:
+  - "my-rules/verbose-rule"  # kill one rule
+  - "other-plugin/*"         # kill an entire plugin's rules
+rules: [ ... ]
+```
+
+IDs from plugin sources are auto-prefixed: `<plugin-name>/<id>`. Your project's own rules stay unprefixed.
+
+### Dev override
+
+`RULER_EXTRA_SOURCES="ns1:/abs/ruler.yml,ns2:/abs/other.yml"` appends sources without needing manifest flags. Handy during plugin development.
+
+### Verifying
+
+```bash
+ruler-engine-dry-run --sources     # list discovered sources
+ruler-engine-dry-run --always      # preview merged always-injection
+ruler-engine-lint --file path/to/ruler.yml   # lint arbitrary file
+```
+
+### Trust note
+
+Enabling `load_plugin_sources: true` means any installed plugin with `"ruler": true` can inject text into every prompt. Review plugins before enabling — they effectively run inside Claude's prompt.
+
 ## Authoring Rules
 
 See the embedded `ruler-authoring` skill (activates automatically when you edit `.claude-rules/*`). Or read `skills/ruler-authoring/SKILL.md` in this repo.

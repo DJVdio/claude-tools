@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 — 2026-04-22
+
+- Feat: plugin-bundled rule sources (opt-in via project `load_plugin_sources: true`)
+- Feat: `disable: [<id-glob>]` filter in project ruler.yml
+- Feat: `RULER_EXTRA_SOURCES` env var for dev/testing (`ns1:/path/ruler.yml,...`)
+- Feat: `ruler-engine-lint --file <path>` mode for plugin-author CI
+- Feat: `ruler-engine-dry-run --sources` lists all discovered sources
+- Feat: mtime-keyed `/tmp/ruler-cache-*.json` avoids repeated yq parsing in hooks
+- Warn: aggregate always-rules size >2KB; dangling `disable:` ids
+- Backward-compatible: no behavior change without explicit opt-in
+
 ## 0.1.0 (2026-04-19)
 
 ### Added

@@ -9,7 +9,7 @@
     {
       "name": "ruler-engine",
       "description": "Pluggable rule-injection engine: loads .claude-rules/ruler.yml from target project and injects rules via UserPromptSubmit / PreToolUse hooks. Engine-only, zero business rules.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "./plugins/ruler-engine",
       "author": {
         "name": "hufangwei"
