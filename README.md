@@ -7,7 +7,8 @@
 ```
 claude-tools/
 ├── plugins/
-│   └── ruler-engine/          Claude Code plugin，项目级规则注入引擎
+│   ├── ruler-engine/          Claude Code plugin，项目级规则注入引擎
+│   └── karpathy-rules/        ruler-engine 的首个消费者，4 条 Karpathy 风格行为规则
 └── skills/
     ├── archive-ops/           需求文档归档 + 过去经验教训读档
     ├── db-ops/                MySQL 安全操作（TEST 直连 / PROD 出 SQL）
@@ -22,9 +23,11 @@ claude-tools/
 
 ## Plugins
 
-### [ruler-engine](plugins/ruler-engine/)
+### [ruler-engine](plugins/ruler-engine/) `v0.2.0`
 
 可插拔的规则注入引擎：读项目下 `.claude-rules/ruler.yml`，通过 `UserPromptSubmit` / `PreToolUse` hook 自动把规则注入 Claude 的 prompt。零业务规则，作者在自己项目里写 rule。
+
+**v0.2.0 新增**：插件级规则源（其他插件声明 `"ruler": true` 即可被本引擎发现）、`disable: [glob]` 过滤、`/tmp` 缓存、`ruler-engine-lint --file` / `ruler-engine-dry-run --sources`。向后兼容 0.1.0。
 
 **依赖**：`yq` + `jq` + `python3`
 **安装**：
@@ -35,6 +38,21 @@ claude-tools/
 ```
 
 详情见 [plugins/ruler-engine/README.md](plugins/ruler-engine/README.md)。
+
+### [karpathy-rules](plugins/karpathy-rules/) `v0.1.0`
+
+4 条 Andrej Karpathy 风格的行为规则（think-before-coding / simplicity-first / surgical-changes / goal-driven-execution），改编自 [forrestchang/andrej-karpathy-skills](https://github.com/forrestchang/andrej-karpathy-skills)。作为 ruler-engine 的首个消费者插件，展示插件级规则源机制。
+
+**依赖**：`ruler-engine >= 0.2.0`
+**安装 + 启用**：
+
+```bash
+/plugin install karpathy-rules
+# 然后在项目 .claude-rules/ruler.yml 顶层加：
+#   load_plugin_sources: true
+```
+
+详情见 [plugins/karpathy-rules/README.md](plugins/karpathy-rules/README.md)。
 
 ---
 
