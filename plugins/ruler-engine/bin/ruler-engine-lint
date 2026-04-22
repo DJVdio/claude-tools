@@ -7,8 +7,18 @@ PLUGIN_ROOT="$(dirname "$SCRIPT_DIR")"
 # shellcheck source=../lib/ruler-load.sh
 source "$PLUGIN_ROOT/lib/ruler-load.sh"
 
+# Parse args
+FILE_ARG=""
+for arg in "$@"; do
+  case "$arg" in
+    --file=*) FILE_ARG="${arg#--file=}" ;;
+    *) echo "unknown arg: $arg" >&2; exit 2 ;;
+  esac
+done
+
 MAX_ALWAYS=5
 MAX_RULE_FILE_BYTES=500
+MAX_ALWAYS_AGG_BYTES=2048
 
 errors=0
 err() { echo "ERROR: $*" >&2; echo "ERROR: $*"; errors=$((errors+1)); }
@@ -32,11 +42,15 @@ validate_when_map() {
   fi
 }
 
-ruler_file="$(find_ruler)" || {
-  echo "ERROR: .claude-rules/ruler.yml not found (searched from $PWD upward)" >&2
-  echo "ERROR: .claude-rules/ruler.yml not found (searched from $PWD upward)"
-  exit 1
-}
+if [[ -n "$FILE_ARG" ]]; then
+  [[ -f "$FILE_ARG" ]] || { echo "ERROR: file not found: $FILE_ARG" >&2; exit 1; }
+  ruler_file="$FILE_ARG"
+else
+  ruler_file="$(find_ruler)" || {
+    echo "ERROR: .claude-rules/ruler.yml not found (searched from $PWD upward)" >&2
+    exit 1
+  }
+fi
 ruler_dir="$(dirname "$ruler_file")"
 
 # 1) YAML parse
@@ -50,6 +64,27 @@ fi
 # 2) version present
 version="$(yq eval '.version // ""' "$ruler_file")"
 [[ "$version" != "1" ]] && err "version must be 1, got '$version'"
+
+# 2b) validate optional top-level load_plugin_sources.
+# Note: yq emits "!!null" (not "null") for absent fields.
+lps_type="$(yq eval '.load_plugin_sources | type' "$ruler_file" 2>/dev/null || echo "!!null")"
+if [[ "$lps_type" != "!!null" && "$lps_type" != "!!bool" ]]; then
+  err "load_plugin_sources must be boolean, got $lps_type"
+fi
+
+# 2c) validate optional top-level disable
+disable_type="$(yq eval '.disable | type' "$ruler_file" 2>/dev/null || echo "!!null")"
+if [[ "$disable_type" != "!!null" && "$disable_type" != "!!seq" ]]; then
+  err "disable must be an array of strings, got $disable_type"
+else
+  if [[ "$disable_type" == "!!seq" ]]; then
+    n_dis="$(yq eval '.disable | length' "$ruler_file")"
+    for ((k=0; k<n_dis; k++)); do
+      dt="$(yq eval ".disable[$k] | type" "$ruler_file")"
+      [[ "$dt" != "!!str" ]] && err "disable[$k] must be string"
+    done
+  fi
+fi
 
 # 3) each rule check
 n_rules="$(yq eval '.rules | length' "$ruler_file")"

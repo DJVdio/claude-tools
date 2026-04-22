@@ -108,3 +108,51 @@ YAML
   [ "$status" -ne 0 ]
   [[ "$output" == *"mix"* || "$output" == *"always"* ]]
 }
+
+@test "lint: --file <path> mode works outside project" {
+  mkdir -p "$TMP/rules"
+  touch "$TMP/rules/r.md"
+  cat > "$TMP/any.yml" <<YAML
+version: 1
+rules:
+  - id: r1
+    when: always
+    inject: rules/r.md
+YAML
+  cd /tmp
+  run "$PLUGIN_ROOT/bin/ruler-engine-lint" --file="$TMP/any.yml"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q 'OK'
+}
+
+@test "lint: invalid load_plugin_sources type errors" {
+  mkdir -p "$TMP/.claude-rules"
+  cat > "$TMP/.claude-rules/ruler.yml" <<YAML
+version: 1
+load_plugin_sources: "yes"
+rules:
+  - id: r1
+    when: always
+    inject: /dev/null
+YAML
+  cd "$TMP"
+  run "$PLUGIN_ROOT/bin/ruler-engine-lint"
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q 'load_plugin_sources'
+}
+
+@test "lint: disable must be array of strings" {
+  mkdir -p "$TMP/.claude-rules"
+  cat > "$TMP/.claude-rules/ruler.yml" <<YAML
+version: 1
+disable: "just-a-string"
+rules:
+  - id: r1
+    when: always
+    inject: /dev/null
+YAML
+  cd "$TMP"
+  run "$PLUGIN_ROOT/bin/ruler-engine-lint"
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q 'disable'
+}
