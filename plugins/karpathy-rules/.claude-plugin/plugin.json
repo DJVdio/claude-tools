@@ -1,0 +1,9 @@
+{
+  "name": "karpathy-rules",
+  "description": "Andrej Karpathy-inspired behavioral guardrails for Claude Code (think before coding, simplicity, surgical changes, goal-driven execution). Requires ruler-engine >= 0.2.0.",
+  "version": "0.1.0",
+  "author": { "name": "hufangwei" },
+  "license": "MIT",
+  "keywords": ["rules", "ruler", "karpathy", "behavioral", "claude-code"],
+  "ruler": true
+}
