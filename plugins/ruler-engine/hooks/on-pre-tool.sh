@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook: inject rules matching current tool + args
+# PreToolUse hook: inject rules matching current tool + args from all active sources.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,16 +7,16 @@ PLUGIN_ROOT="$(dirname "$SCRIPT_DIR")"
 # shellcheck source=../lib/ruler-load.sh
 source "$PLUGIN_ROOT/lib/ruler-load.sh"
 
-# Read stdin JSON
 input="$(cat)"
 tool_name="$(echo "$input" | jq -r '.tool_name // empty')"
 file_path="$(echo "$input" | jq -r '.tool_input.file_path // empty')"
 command_arg="$(echo "$input" | jq -r '.tool_input.command // empty')"
 
-ruler_file="$(find_ruler)" || exit 0
-ruler_dir="$(dirname "$ruler_file")"
+project_ruler="$(find_ruler 2>/dev/null || true)"
+if [[ -z "$project_ruler" && -z "${RULER_EXTRA_SOURCES:-}" ]]; then
+  exit 0
+fi
 
-# Iterate non-always rules; emit matched ones
 matched_ids=()
 matched_paths=()
 
@@ -24,8 +24,7 @@ while IFS= read -r rule_json; do
   [[ -z "$rule_json" ]] && continue
   id="$(echo "$rule_json" | jq -r '.id')"
   inject="$(echo "$rule_json" | jq -r '.inject')"
-  # `when` can be object or array
-  # Normalize to array
+  dir="$(echo "$rule_json" | jq -r '.dir')"
   conds="$(echo "$rule_json" | jq -c 'if (.when | type) == "array" then .when else [.when] end')"
   n="$(echo "$conds" | jq 'length')"
   for ((i=0; i<n; i++)); do
@@ -38,34 +37,32 @@ while IFS= read -r rule_json; do
       [[ -z "$file_path" ]] && continue
       if glob_match "$c_glob" "$file_path"; then
         matched_ids+=("$id")
-        matched_paths+=("$inject")
+        matched_paths+=("$dir/$inject")
         break
       fi
     elif [[ -n "$c_regex" ]]; then
       [[ -z "$command_arg" ]] && continue
       if echo "$command_arg" | grep -Eq "$c_regex"; then
         matched_ids+=("$id")
-        matched_paths+=("$inject")
+        matched_paths+=("$dir/$inject")
         break
       fi
     else
-      # tool-only match
       matched_ids+=("$id")
-      matched_paths+=("$inject")
+      matched_paths+=("$dir/$inject")
       break
     fi
   done
-done < <(get_tool_rules "$ruler_file")
+done < <(load_merged_tool_cached)
 
 [[ "${#matched_ids[@]}" -eq 0 ]] && exit 0
 
-# Emit injection. Compact wrapper — tool attr conveys context; body verbatim.
 {
   echo "<critical-rules tool=\"$tool_name\">"
   for i in "${!matched_ids[@]}"; do
     echo "⚠ ${matched_ids[$i]}"
-    if [[ -f "$ruler_dir/${matched_paths[$i]}" ]]; then
-      cat "$ruler_dir/${matched_paths[$i]}"
+    if [[ -f "${matched_paths[$i]}" ]]; then
+      cat "${matched_paths[$i]}"
     else
       echo "(missing: ${matched_paths[$i]})"
     fi
