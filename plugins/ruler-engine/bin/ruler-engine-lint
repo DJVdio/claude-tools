@@ -145,4 +145,48 @@ if (( errors > 0 )); then
   exit 1
 fi
 
+# Aggregate always-rules size warning
+agg=0
+for ((i=0; i<n_rules; i++)); do
+  w="$(yq eval ".rules[$i].when" "$ruler_file")"
+  if [[ "$w" == "always" ]]; then
+    inj="$(yq eval ".rules[$i].inject" "$ruler_file")"
+    [[ -f "$ruler_dir/$inj" ]] && agg=$((agg + $(wc -c < "$ruler_dir/$inj")))
+  fi
+done
+(( agg > MAX_ALWAYS_AGG_BYTES )) && warn "aggregate always-rules size ${agg}B exceeds ${MAX_ALWAYS_AGG_BYTES}B — every prompt will carry this overhead"
+
+# Dangling disable check: any disable pattern that matches no known rule id
+if [[ "$disable_type" == "!!seq" && -z "$FILE_ARG" ]]; then
+  # Build set of all known ids (project + plugin sources if opt-in)
+  known_ids=()
+  lps_val="$(yq eval '.load_plugin_sources // false' "$ruler_file")"
+  # project ids (unprefixed)
+  for ((i=0; i<n_rules; i++)); do
+    known_ids+=("$(yq eval ".rules[$i].id" "$ruler_file")")
+  done
+  # plugin ids (namespaced)
+  if [[ "$lps_val" == "true" ]]; then
+    while IFS=$'\t' read -r ns ruler; do
+      [[ -z "$ns" ]] && continue
+      nn="$(yq eval '.rules | length' "$ruler" 2>/dev/null || echo 0)"
+      for ((j=0; j<nn; j++)); do
+        known_ids+=("$ns/$(yq eval ".rules[$j].id" "$ruler")")
+      done
+    done < <(find_plugin_sources 2>/dev/null)
+  fi
+
+  n_dis="$(yq eval '.disable | length' "$ruler_file")"
+  for ((k=0; k<n_dis; k++)); do
+    pat="$(yq eval ".disable[$k]" "$ruler_file")"
+    matched=0
+    for kid in "${known_ids[@]}"; do
+      case "$kid" in
+        $pat) matched=1; break ;;
+      esac
+    done
+    (( matched == 0 )) && warn "disable[$k]: no rule matches '$pat' (dangling — plugin uninstalled?)"
+  done
+fi
+
 echo "ruler-engine-lint: OK ($n_rules rules, $always_count always)"

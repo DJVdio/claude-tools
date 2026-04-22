@@ -156,3 +156,39 @@ YAML
   [ "$status" -ne 0 ]
   echo "$output" | grep -q 'disable'
 }
+
+@test "lint: warns on aggregate always-rules >2KB" {
+  mkdir -p "$TMP/.claude-rules/rules"
+  cat > "$TMP/.claude-rules/ruler.yml" <<YAML
+version: 1
+rules:
+  - id: big
+    when: always
+    inject: rules/big.md
+YAML
+  python3 -c "print('x'*2500, end='')" > "$TMP/.claude-rules/rules/big.md"
+  cd "$TMP"
+  run "$PLUGIN_ROOT/bin/ruler-engine-lint"
+  [ "$status" -eq 0 ]
+  # Warning goes to stderr; merge stderr into combined output for grep
+  run bash -c "'$PLUGIN_ROOT/bin/ruler-engine-lint' 2>&1"
+  echo "$output" | grep -q 'aggregate'
+}
+
+@test "lint: warns on dangling disable id" {
+  mkdir -p "$TMP/.claude-rules"
+  touch "$TMP/.claude-rules/r1.md"
+  cat > "$TMP/.claude-rules/ruler.yml" <<YAML
+version: 1
+disable:
+  - "nonexistent/thing"
+rules:
+  - id: r1
+    when: always
+    inject: r1.md
+YAML
+  cd "$TMP"
+  run bash -c "'$PLUGIN_ROOT/bin/ruler-engine-lint' 2>&1"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qi 'dangling\|no rule matches'
+}
