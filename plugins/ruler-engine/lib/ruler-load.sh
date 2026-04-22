@@ -126,3 +126,29 @@ find_plugin_sources() {
     IFS="$IFS_OLD"
   fi
 }
+
+# get_always_rules_ns <ruler_file> <namespace>
+#   Like get_always_rules but prefixes id with "<namespace>/" when namespace
+#   is non-empty. Preserves "<prefixed_id>\t<inject>" format.
+get_always_rules_ns() {
+  local file="$1" ns="$2"
+  local raw
+  raw="$(get_always_rules "$file")"
+  [[ -z "$ns" ]] && { printf '%s\n' "$raw"; return 0; }
+  while IFS=$'\t' read -r id inject; do
+    [[ -z "$id" ]] && continue
+    printf '%s/%s\t%s\n' "$ns" "$id" "$inject"
+  done <<< "$raw"
+}
+
+# get_tool_rules_ns <ruler_file> <namespace>
+#   Like get_tool_rules but rewrites .id to "<namespace>/<id>" when namespace
+#   is non-empty. Output remains JSONL (one rule per line).
+get_tool_rules_ns() {
+  local file="$1" ns="$2"
+  if [[ -z "$ns" ]]; then
+    get_tool_rules "$file"
+    return 0
+  fi
+  get_tool_rules "$file" | jq -c --arg ns "$ns" '.id = ($ns + "/" + .id)'
+}
