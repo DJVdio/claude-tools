@@ -82,7 +82,7 @@ get_tool_rules() {
 
 # get_installed_plugins
 #   Emit tab-separated "<plugin_name>\t<install_path>" for each installed plugin.
-#   Plugin name = map key without the "@marketplace" suffix.
+#   Plugin name = map key before the first "@" (strips the @marketplace suffix).
 #   Returns 0 with empty output when installed_plugins.json is missing.
 get_installed_plugins() {
   local f="$HOME/.claude/plugins/installed_plugins.json"

@@ -4,11 +4,13 @@ setup() {
   PLUGIN_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   source "$PLUGIN_ROOT/lib/ruler-load.sh"
   TMP="$(mktemp -d)"
+  ORIGINAL_HOME="$HOME"
   export HOME="$TMP"
   mkdir -p "$HOME/.claude/plugins"
 }
 
 teardown() {
+  export HOME="$ORIGINAL_HOME"
   rm -rf "$TMP"
 }
 
