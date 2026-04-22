@@ -152,3 +152,36 @@ get_tool_rules_ns() {
   fi
   get_tool_rules "$file" | jq -c --arg ns "$ns" '.id = ($ns + "/" + .id)'
 }
+
+# project_load_plugin_sources <ruler_file>
+#   Echo "true" or "false" based on top-level load_plugin_sources field.
+project_load_plugin_sources() {
+  local file="$1"
+  [[ -f "$file" ]] || { echo "false"; return 0; }
+  local v
+  v="$(yq eval '.load_plugin_sources // false' "$file" 2>/dev/null)"
+  [[ "$v" == "true" ]] && echo "true" || echo "false"
+}
+
+# get_disabled_ids <ruler_file>
+#   Emit one id-or-glob per line from top-level disable[] array.
+get_disabled_ids() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  yq eval '.disable // [] | .[]' "$file" 2>/dev/null | grep -v '^$' || true
+}
+
+# id_is_disabled <id> <disable_list_multi_line>
+#   Returns 0 if id matches any glob pattern in the newline-separated list.
+id_is_disabled() {
+  local id="$1" list="$2"
+  [[ -z "$list" ]] && return 1
+  while IFS= read -r pat; do
+    [[ -z "$pat" ]] && continue
+    # Use bash extglob-free fnmatch via case pattern
+    case "$id" in
+      $pat) return 0 ;;
+    esac
+  done <<< "$list"
+  return 1
+}
