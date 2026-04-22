@@ -225,3 +225,42 @@ load_merged_always() {
     done < <(get_always_rules_ns "$project_ruler" "")
   fi
 }
+
+# _ruler_emit_tool <namespace> <ruler_file> <disable_list>
+#   Internal helper: emit JSONL rules from one source with dir attached.
+#   Defined at top-level (not nested inside another function) to avoid
+#   bash scope leakage after first call to load_merged_tool.
+_ruler_emit_tool() {
+  local ns="$1" ruler="$2" disable_list="$3"
+  local dir
+  dir="$(dirname "$ruler")"
+  get_tool_rules_ns "$ruler" "$ns" | while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    local id
+    id="$(echo "$line" | jq -r '.id')"
+    id_is_disabled "$id" "$disable_list" && continue
+    echo "$line" | jq -c --arg dir "$dir" '. + {dir: $dir}'
+  done
+}
+
+# load_merged_tool
+#   Emit JSONL of tool rules (non-always) with fields {id, when, inject, dir}
+#   where `dir` is the absolute path of the rule's source directory
+#   (used by on-pre-tool.sh to cat inject files).
+load_merged_tool() {
+  local project_ruler disable_list="" opt_in="false"
+  project_ruler="$(find_ruler 2>/dev/null || true)"
+  if [[ -n "$project_ruler" ]]; then
+    disable_list="$(get_disabled_ids "$project_ruler")"
+    opt_in="$(project_load_plugin_sources "$project_ruler")"
+  fi
+
+  if [[ "$opt_in" == "true" ]]; then
+    while IFS=$'\t' read -r ns ruler; do
+      [[ -z "$ns" ]] && continue
+      _ruler_emit_tool "$ns" "$ruler" "$disable_list"
+    done < <(find_plugin_sources)
+  fi
+
+  [[ -n "$project_ruler" ]] && _ruler_emit_tool "" "$project_ruler" "$disable_list"
+}
