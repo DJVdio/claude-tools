@@ -185,3 +185,43 @@ id_is_disabled() {
   done <<< "$list"
   return 1
 }
+
+# load_merged_always
+#   Emit "<id>\t<absolute_inject_path>" lines for every always-rule that
+#   should be injected, respecting opt-in gate and disable list.
+#   Absolute paths let hook consumers cat files without re-tracking dirs.
+load_merged_always() {
+  local project_ruler
+  project_ruler="$(find_ruler 2>/dev/null || true)"
+
+  local disable_list=""
+  [[ -n "$project_ruler" ]] && disable_list="$(get_disabled_ids "$project_ruler")"
+
+  local opt_in="false"
+  [[ -n "$project_ruler" ]] && opt_in="$(project_load_plugin_sources "$project_ruler")"
+
+  # 1) Plugin sources (only if opt-in)
+  if [[ "$opt_in" == "true" ]]; then
+    while IFS=$'\t' read -r ns ruler; do
+      [[ -z "$ns" ]] && continue
+      local dir
+      dir="$(dirname "$ruler")"
+      while IFS=$'\t' read -r id inject; do
+        [[ -z "$id" ]] && continue
+        id_is_disabled "$id" "$disable_list" && continue
+        printf '%s\t%s\n' "$id" "$dir/$inject"
+      done < <(get_always_rules_ns "$ruler" "$ns")
+    done < <(find_plugin_sources)
+  fi
+
+  # 2) Project source (always, disable applied for consistency)
+  if [[ -n "$project_ruler" ]]; then
+    local proj_dir
+    proj_dir="$(dirname "$project_ruler")"
+    while IFS=$'\t' read -r id inject; do
+      [[ -z "$id" ]] && continue
+      id_is_disabled "$id" "$disable_list" && continue
+      printf '%s\t%s\n' "$id" "$proj_dir/$inject"
+    done < <(get_always_rules_ns "$project_ruler" "")
+  fi
+}
