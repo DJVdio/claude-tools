@@ -264,3 +264,102 @@ load_merged_tool() {
 
   [[ -n "$project_ruler" ]] && _ruler_emit_tool "" "$project_ruler" "$disable_list"
 }
+
+# _ruler_sha1
+#   Portable sha1: prefer shasum (macOS default), fall back to sha1sum (most Linux),
+#   fall back to openssl as last resort. Reads from stdin.
+_ruler_sha1() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum | awk '{print $1}'
+  elif command -v sha1sum >/dev/null 2>&1; then
+    sha1sum | awk '{print $1}'
+  else
+    openssl dgst -sha1 | awk '{print $NF}'
+  fi
+}
+
+# ruler_cache_path
+#   Absolute path to this project's cache file.
+#   Key on the ruler-file's directory (stable across cd into subdirs), or
+#   fall back to $PWD when no project ruler exists (env-var-only mode).
+ruler_cache_path() {
+  local base h
+  base="$(find_ruler 2>/dev/null || true)"
+  [[ -n "$base" ]] && base="$(dirname "$base")" || base="$PWD"
+  h="$(printf '%s' "$base" | _ruler_sha1)"
+  echo "/tmp/ruler-cache-$h.json"
+}
+
+# ruler_cache_clear
+ruler_cache_clear() {
+  rm -f "$(ruler_cache_path)"
+}
+
+# ruler_cache_key
+#   Combined mtime hash of all inputs that affect merged output.
+ruler_cache_key() {
+  local files=()
+  local project_ruler
+  project_ruler="$(find_ruler 2>/dev/null || true)"
+  [[ -n "$project_ruler" ]] && files+=("$project_ruler")
+  [[ -f "$HOME/.claude/plugins/installed_plugins.json" ]] \
+    && files+=("$HOME/.claude/plugins/installed_plugins.json")
+  while IFS=$'\t' read -r ns ruler; do
+    [[ -n "$ruler" ]] && files+=("$ruler")
+  done < <(find_plugin_sources 2>/dev/null)
+
+  local mtimes=""
+  for f in "${files[@]}"; do
+    if [[ -f "$f" ]]; then
+      mtimes+="$(stat -f '%m' "$f" 2>/dev/null || stat -c '%Y' "$f" 2>/dev/null):"
+    fi
+  done
+  printf '%s' "$mtimes" | _ruler_sha1
+}
+
+# load_merged_always_cached
+#   Wraps load_merged_always with mtime-keyed /tmp cache.
+load_merged_always_cached() {
+  local cache_file key_now cached_key
+  cache_file="$(ruler_cache_path)"
+  key_now="$(ruler_cache_key)"
+
+  if [[ -f "$cache_file" ]]; then
+    cached_key="$(jq -r '.key // ""' "$cache_file" 2>/dev/null)"
+    if [[ "$cached_key" == "$key_now" ]]; then
+      jq -r '.always[] | [.id, .path] | @tsv' "$cache_file" 2>/dev/null
+      return 0
+    fi
+  fi
+
+  # Miss — rebuild both always AND tool in one pass so later
+  # load_merged_tool_cached calls are free reads. This doubles cold-start cost
+  # vs building only what was asked, but cuts steady-state hook overhead.
+  local always_json tool_json
+  always_json="$(load_merged_always | jq -R -s 'split("\n") | map(select(length>0) | split("\t") | {id: .[0], path: .[1]})')"
+  tool_json="$(load_merged_tool | jq -s '.')"
+
+  jq -n --arg k "$key_now" --argjson a "$always_json" --argjson t "$tool_json" \
+    '{key:$k, always:$a, tool:$t}' > "$cache_file" 2>/dev/null || true
+
+  printf '%s\n' "$always_json" | jq -r '.[] | [.id, .path] | @tsv'
+}
+
+# load_merged_tool_cached
+load_merged_tool_cached() {
+  local cache_file key_now cached_key
+  cache_file="$(ruler_cache_path)"
+  key_now="$(ruler_cache_key)"
+
+  if [[ -f "$cache_file" ]]; then
+    cached_key="$(jq -r '.key // ""' "$cache_file" 2>/dev/null)"
+    if [[ "$cached_key" == "$key_now" ]]; then
+      jq -c '.tool[]' "$cache_file" 2>/dev/null
+      return 0
+    fi
+  fi
+
+  # Force rebuild via load_merged_always_cached (which also writes tool cache)
+  load_merged_always_cached >/dev/null
+  jq -c '.tool[]' "$cache_file" 2>/dev/null || true
+}
