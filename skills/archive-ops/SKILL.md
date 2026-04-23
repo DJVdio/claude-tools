@@ -90,11 +90,17 @@ python3 ~/.claude/skills/archive-ops/archive_ops.py collect "<需求目录绝对
      - 若协议/库视角使用 → 归 `tech`（如"升级 ws 协议版本"）
      - **实在两者都有** → 两个维度都抽，不重复也不遗漏。tag 在不同维度里是独立索引的，多抽无代价。
 4. **写 summary**：2-3 句话，描述"场景 → 根因 → 方案"。
-5. **写 lessons**：1-3 条**可复用教训**。判断标准：把项目名/文件名去掉后，这句话在别的项目里读仍然有意义。
-   - ✅ "事务内禁止做 IO 和异步调度，用 afterCommit 回调"
-   - ✅ "复合索引 (A,B,time) 不能替代单列 (time)，删索引前 grep 所有纯时间范围查询"
-   - ❌ "本次修改了 AsmsTicketServiceImpl.java 的 sendMessage 方法"（事实陈述，不是教训）
-   - ❌ "修 bug 后发布上线"（不可复用）
+5. **写 lessons**：两类条目合写一个数组，**两类都必须有**：
+   - **可复用教训**（1-3 条）：把项目名/文件名去掉后，这句话在别的项目里读仍然有意义。
+     - ✅ "事务内禁止做 IO 和异步调度，用 afterCommit 回调"
+     - ✅ "复合索引 (A,B,time) 不能替代单列 (time)，删索引前 grep 所有纯时间范围查询"
+     - ❌ "本次修改了 AsmsTicketServiceImpl.java 的 sendMessage 方法"（事实陈述，不是教训）
+     - ❌ "修 bug 后发布上线"（不可复用）
+   - **可复用资产**（至少 1 条，格式 `[资产] <名称> — <复用点>`）：本次沉淀了哪些组件/注解/Service 方法/错误码段/DTO/工具函数，可供后续需求直接引用。**避免重复造车轮的关键就在这条**——lookup 命中时，AI 必须能从 lessons 里拿到可直接 import 的资产名。
+     - ✅ "[资产] `@ArenaPermission` 注解 — 支持 dataScope 过滤，新增 CRUD 直接挂即可"
+     - ✅ "[资产] `OperationLogService#recordWithDiff` — 24 操作类型已覆盖，新模块审计复用此方法"
+     - ✅ "[资产] 错误码段 `101701~101711` — 赛事 Match 域已占用，新 Match 相关错误延续此段"
+     - ❌ "[资产] 做了一个弹窗"（无具体名称 / 无复用点说明）
 6. **构造 id**：`<YYYYMMDD>-<kebab-case-topic>`，如 `20260416-sendmsg-tx-deadlock`。正则 `^[A-Za-z0-9][A-Za-z0-9_\-]{0,99}$`（字母数字/下划线/连字符，首字符字母数字，长度 ≤ 100）。非法字符如 `/` `.` `\n` 会被 CLI 拒绝（路径穿越防护）。
 
 ### 步骤 A3 · 预览 + 落盘
