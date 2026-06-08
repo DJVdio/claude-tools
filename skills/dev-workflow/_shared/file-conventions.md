@@ -24,8 +24,10 @@
     ├── plan.md                 (6) fullstack-builder 规划阶段产出（由 superpowers:writing-plans 生成）
     ├── 测试.md                 (7) test-runner 产出
     ├── 测试报告.md             (8) test-runner 产出（多次运行追加）
-    └── automation/             (9) test-runner 产出的接口自动化脚本目录
-        ├── ...
+    └── automation/             (9) test-runner 产出的自动化脚本目录（按层分三子目录）
+            ├── unit/           ← 单元测试脚本
+            ├── api/            ← 接口集成测试脚本
+            └── e2e/            ← Playwright E2E 测试脚本
 ```
 
 ### 1.2 九类产物总览
@@ -188,18 +190,30 @@
 
 使用 `centralized` 时，必须在 `<target-requirement-dir>/automation.md` 留一个指针文件，内容 `该需求的自动化脚本位于 <test_dir>/{编号}-{功能名}/`，确保按需求目录追溯仍然可达。
 
-### 7.2 脚本命名
+### 7.2 脚本命名（按层）
 
-脚本命名遵循 `test_backend_stack` 的惯例：
-  - `junit5` → `src/test/java/.../XxxTest.java`（若直接放到 automation/ 下则保留包结构）
+脚本命名按测试层级分别遵循惯例：
+
+**层 A — 单元测试**（`automation/unit/`）：
+  - `junit5` → `XxxTest.java`（保留包路径）
   - `pytest` → `test_xxx.py`
-  - `jest` / `supertest` → `xxx.test.js` / `xxx.spec.ts`
+  - `jest` / `vitest` → `xxx.test.ts`
   - `go-test` → `xxx_test.go`
   - `xunit` / `nunit` → `XxxTests.cs`
+  - 其他按 `test_backend_stack` 映射
+
+**层 B — 接口集成测试**（`automation/api/`）：
+  - 命名同上，但加 `*Api` 或 `*Integration` 后缀（如 `UserApiTest.java` / `test_user_api.py`）
+  - 或按接口名命名：`create-order.test.ts` / `test_create_order.py`
+
+**层 C — E2E 测试**（`automation/e2e/`）：
+  - Playwright → `<feature-name>.spec.ts`（如 `login.spec.ts`）
+  - Page Object → `pages/<PageName>Page.ts`
+  - 工具 → `utils/<util-name>.ts`
 
 ### 7.3 可运行性
 
-必须**独立可运行**：由项目现有测试框架驱动；脚本执行目录按 `test_cwd` / `backend_cwd`（见 project-adapter.md Part 4.2）。若项目无测试基建（如空 `<test_dir>`），补最小运行入口（`pom.xml` 子模块 / `package.json` / `pyproject.toml`）并依赖 `<backend_dir>` 产物；本版本不主动为前端补 UI 自动化。
+必须**独立可运行**：由项目现有测试框架驱动；脚本执行目录按 `test_cwd` / `backend_cwd`（见 project-adapter.md Part 4.2）。若项目无测试基建（如空 `<test_dir>`），补最小运行入口（`pom.xml` 子模块 / `package.json` / `pyproject.toml`）并依赖 `<backend_dir>` 产物。E2E 层（`automation/e2e/`）需 `<frontend_dir>` 下 `playwright.config.ts` + dev server，按 test-runner Step 4.3 自动配置。
 
 禁止把手工测试清单写入 automation/（手测放 `测试.md` 中）。
 
@@ -214,7 +228,7 @@
 - `feasibility-assessor`：跳过对 `<frontend_dir>` 的 Grep / Read；`涉及文件清单`只含后端文件；`前端交互点` 写 `N/A（纯后端项目）`。
 - `fullstack-builder`：plan/TDD 不涉及前端；verification 跳过 `frontend_cwd` 命令；self-review 维度 2 的"前后端契约一致性"退化为"后端内部契约（接口/DTO/事件）一致性"。
 - `change-summarizer`：`## 前端交互点` 小节写 `N/A（纯后端改动）`，不删除小节。
-- `test-runner`：`test_frontend_stack` 视为 N/A；`测试.md` 的"前端手测清单"写 `N/A`。
+- `test-runner`：`test_frontend_stack` 视为 N/A；`测试.md` §3.3 E2E 用例写 `N/A（纯后端项目）`，不安装 Playwright、不生成 E2E 脚本。
 
 ### 8.2 `backend_stack = N/A` / `pending`（纯前端项目）
 
