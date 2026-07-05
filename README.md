@@ -13,6 +13,7 @@ claude-tools/
     ├── archive-ops/           需求文档归档 + 过去经验教训读档
     ├── db-ops/                MySQL 安全操作（TEST 直连 / PROD 出 SQL）
     ├── large-file-write/      写超大文件（>1000 行）时防 socket 断开的分片策略
+    ├── ta/                    多 agent 团队编排（主 agent 当技术负责人调度 subagent 并行交付）
     └── dev-workflow/          研发全流程三件套（产品 → 全栈 → 测试）
         ├── _shared/           跨 skill 共享 reference
         ├── product-designer/  写 PRD / 拆需求 / 可行性评估
@@ -100,6 +101,19 @@ ln -s "$PWD/skills/large-file-write" ~/.claude/skills/large-file-write
 ```
 
 触发方式：Claude 遇到写大文件场景或收到 socket 错误时自动命中；也可直接说"用分片写 xxx.html"。
+
+### [ta](skills/ta/)
+
+多 agent 团队编排规则。把一次会话变成一支开发团队：**主 agent 只当技术负责人做拆单 / 派单 / 协调 / 汇总 / 与用户交互，侦察·实现·验证·git 收口全部派给 subagent 并行执行**。核心收益：主上下文不被代码细节淹没、独立任务真并行、批次化收口可追溯。含角色编制、派单 prompt 要素、git-ops 常驻收口专员、批次收口流程、定期回报循环、异常处理手册。
+
+**仅通过 `/ta` 手动触发，不自动命中。**
+
+**安装**（纯 SKILL.md，零依赖）：
+
+```bash
+cd /path/to/claude-tools   # 先进入本仓库根目录（$PWD 才会指对）
+ln -s "$PWD/skills/ta" ~/.claude/skills/ta
+```
 
 ### [dev-workflow](skills/dev-workflow/)
 
