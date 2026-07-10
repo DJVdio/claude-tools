@@ -1,0 +1,26 @@
+{
+  "skill_name": "tabb",
+  "evals": [
+    {
+      "id": 0,
+      "name": "shared-file-contention",
+      "prompt": "用 tabb 组队，在同一个仓库 /Users/me/shop 里并行改 5 个模块：教练列表、门店 LED 查询、优惠券、签到、导出。其中好几个改动都会碰到公共文件 src/shared/utils.ts 和 src/shared/types.ts，我不想每次文件冲突都来问我，让 agent 自己协调避让。目标分支 dev。",
+      "expected_output": "编排方案：主 agent 建 .tabb/board.md + journal.md、把 5 个模块拆成可并行任务播种队列、派单里内嵌认领协议五步（读→锁→回读校验→判定→放锁）让 agent 自助避让 shared/utils.ts 与 types.ts；主 agent 不自己改代码。",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "decision-escalation",
+      "prompt": "启动一个 tabb 团队修 3 个 bug：登录超时、订单金额算错、导出乱码。仓库 /Users/me/shop，分支 dev。订单金额那个可能要清理生产库里 2023 年前的脏数据。",
+      "expected_output": "3 个 bug 并行派单；订单金额涉及生产库写，agent 不自裁——写 [DECISION] 到 journal 挂起，主 agent 轮询到即上抛用户（带推荐选项）先拍板再动；先红后绿修复纪律。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "handoff-via-blackboard",
+      "prompt": "用 tabb 组队处理支付重构：先摸清支付链路的现状，摸清之后把发现交接给下游 agent 做重构。仓库 /Users/me/shop，分支 dev。",
+      "expected_output": "先派 scout 只读摸链路，scout 把结论以 [HANDOFF] 写进 journal.md（带 file:line），下游 impl agent 轮询到交接就接着做重构；agent 间交接走黑板而非主 agent 中转。",
+      "files": []
+    }
+  ]
+}
