@@ -114,3 +114,11 @@ skill-creator 建 `tabb` skill，产出 `skills/tabb/SKILL.md`，风格对齐现
 2. **交接的诚实流程**：主 agent 读 `[HANDOFF]` 只当 spawn 门禁放行信号，不把正文复述进下游派单，让下游自己读 journal——交接**内容**不过主 agent，只有 spawn **门禁**过主 agent。
 3. **blocked 播种法**：有依赖的下游任务先播 `blocked:等[HANDOFF]xxx`，门禁触发再提为 open，防止下游空转。
 4. **定位收敛**：Overview/选型 改为以"文件争用协调"为第一判据与头号卖点，其余区块降为配套。
+
+## 后续迭代（实跑反馈驱动，2026-07-10）
+
+1. **铁律二补入**：小/不复杂任务一站式 general-purpose，两跳只留给复杂任务；判据是复杂度不是规模。
+2. **里程碑进标准派单块**：原先只在散文提"沿用 ta"，落地丢失致进度表退化；已塞进协议块模板本体。
+3. **拍板走交互**：需用户拍板的尽量用 AskUserQuestion 带推荐项选项卡。
+4. **文件锁改原子 lockfile**（取代本文「认领协议」那节的乐观锁）：`mkdir .tabb/locks/<F>` 抢、`rm -rf` 放，OS 级原子互斥——比"共享锁表 + 回读比时间戳"少一半工具往返、且根除 TOCTOU 竞态。任务队列/journal 保持文件。
+5. **idle 不回报兜底**：tabb 加了 journal 输出通道后，scout 常写完 journal 就 idle 不 return；协议块钉死"写 journal ≠ 回报、完工必 return"，回报循环再兜一道催报。
