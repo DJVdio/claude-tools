@@ -122,3 +122,27 @@ skill-creator 建 `tabb` skill，产出 `skills/tabb/SKILL.md`，风格对齐现
 3. **拍板走交互**：需用户拍板的尽量用 AskUserQuestion 带推荐项选项卡。
 4. **文件锁改原子 lockfile**（取代本文「认领协议」那节的乐观锁）：`mkdir .tabb/locks/<F>` 抢、`rm -rf` 放，OS 级原子互斥——比"共享锁表 + 回读比时间戳"少一半工具往返、且根除 TOCTOU 竞态。任务队列/journal 保持文件。
 5. **idle 不回报兜底**：tabb 加了 journal 输出通道后，scout 常写完 journal 就 idle 不 return；协议块钉死"写 journal ≠ 回报、完工必 return"，回报循环再兜一道催报。
+
+## 性能调研：黑板该不该搬进内存？（2026-07-14，实测）
+
+**起因**：怀疑"黑板走磁盘"拖慢 tabb，考虑把锁和黑板搬进内存（tmpfs / MCP 常驻 server）。
+
+**结论：前提不成立——锁和黑板本来就在内存里，磁盘不是瓶颈。** 本机 APFS 实测：
+
+| 操作 | 纯磁盘耗时 |
+|---|---|
+| `mkdir` 抢锁 + 写 meta + `rm` 放锁 | 161 µs |
+| 读 board.md（~500B） | 10 µs |
+| 读改写 board.md（认领） | 58 µs |
+| append journal.md | 27 µs |
+| `ls .tabb/locks/` | 8 µs |
+
+- 一条完整抢锁 Bash **本地执行 21 ms**，拆开是：`python3` 冷启动取时间戳 **16.5 ms（78%）**、shell 进程启动 4.5 ms（21%）、**真正的磁盘操作 0.16 ms（0.8%）**。
+- 再叠 LLM 往返（逐字生成三行含 `sed` 转义的 shell，上百 output token，秒级），一次抢锁端到端 **3–6 秒**，磁盘占 **0.003%**。搬内存的收益上限约等于零。
+- **"读 500B 文件只要 10 µs"本身就是证据**：SSD 随机读至少 50–100 µs，10 µs 只可能来自 page cache。`.tabb/` 的小文件读写全在内核 unified buffer cache 里完成，`mkdir`/`write` 都不 `fsync`，落盘是异步 writeback、不阻塞 agent。**OS 已经免费把黑板放进内存了**，还白送崩溃后状态仍在盘上、`ls`/`cat` 一眼可查的调试能力。
+
+**真正的成本结构**：LLM 工具往返次数 × 秒级往返延迟 + 把黑板读进上下文的 token。两项都与存储介质无关，换介质动不了任何一项。
+
+**据此的修正（已落地 SKILL.md）**：**抢锁协议删掉 `python3` 时间戳**。SKILL.md 自己就写着"锁的正确性只靠 `mkdir` 原子性、死锁判定用锁目录 mtime，都不依赖它"——既然不依赖就是纯浪费，而它吃掉单条抢锁本地耗时的 78%。删后实测 **21.16 ms → 4.66 ms（4.5x）**，同时 LLM 每次少生成一行最易写错的 shell。死锁判定改用 `find .tabb/locks -maxdepth 1 -mindepth 1 -type d -mmin +10`（已验证 macOS 可用）；meta 只留持有者。
+
+**未采纳但机制上可行：MCP 内存黑板。** 实测确认 subagent 的 Bash 与主 agent 的 Bash 挂在**同一个 claude 进程**（ppid 相同）下——subagent 不是独立 OS 进程，所以 stdio MCP server 在 session 启动时连接一次、全体 agent 共享其进程内存，方案成立。但它**省的不是磁盘 I/O，而是工具往返次数与 output token**：把抢锁变成 `lock(file=...)` 结构化调用，把"读 board→改认领者→写回→回读校验"的非原子读改写压成一次原子 `claim_next_task(agent_id)`（顺带根除任务队列 TOCTOU）。代价是 daemon 生命周期管理、崩溃后状态全丢、调试从 `cat journal.md` 退化成翻 MCP 日志。留作后续选项。
