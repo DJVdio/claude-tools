@@ -48,21 +48,38 @@ seal_one() {
 
   echo "── diff --cached 核对"
   local STAGED; STAGED=$(git diff --cached --name-only)
-  [ -z "${STAGED}" ] && die empty "暂存区为空，无可提交内容（改动是否已被提交？）"
-  local f
-  for f in ${STAGED}; do
-    printf '%s\n' "${FILES[@]}" | grep -qxF "${f}" || die whitelist "暂存区混入清单外文件: ${f}"
-  done
-  echo "${STAGED}" | sed 's/^/     /'
+  local RESUME=0
+  if [ -z "${STAGED}" ]; then
+    # 暂存区空有两种可能：(a) 真没改动；(b) 上次收口已 commit 但在 rebase/push 阶段
+    # 失败了 —— 改动都在本地未推的 commit 里。(b) 必须能续推，否则失败后重跑必挂。
+    git fetch -q origin 2>/dev/null
+    local AHEAD; AHEAD=$(git rev-list --count "origin/${BR}..HEAD" 2>/dev/null || echo 0)
+    if [ "${AHEAD}" -gt 0 ]; then
+      RESUME=1
+      echo "     暂存区为空，但本地有 ${AHEAD} 个未推 commit —— 上次收口在 push 前失败，续推"
+    else
+      die empty "暂存区为空，无可提交内容（改动是否已被收口？）"
+    fi
+  else
+    local f
+    for f in ${STAGED}; do
+      printf '%s\n' "${FILES[@]}" | grep -qxF "${f}" || die whitelist "暂存区混入清单外文件: ${f}"
+    done
+    echo "${STAGED}" | sed 's/^/     /'
+  fi
 
   if [ "${DRY}" = 1 ]; then
     echo "── [dry-run] 到此为止，未 commit/push"
-    git reset -q; exit 0
+    [ "${RESUME}" = 0 ] && git reset -q
+    exit 0
   fi
 
-  echo "── commit"
-  git commit -qm "${MSG}" || die commit "commit 失败"
-  local SHA; SHA=$(git rev-parse HEAD) || die revparse "取 sha 失败"
+  local SHA
+  if [ "${RESUME}" = 0 ]; then
+    echo "── commit"
+    git commit -qm "${MSG}" || die commit "commit 失败"
+  fi
+  SHA=$(git rev-parse HEAD) || die revparse "取 sha 失败"
   echo "     sha: ${SHA}"
 
   # push 前 fetch；远端前移则 rebase（禁 force）
@@ -132,7 +149,7 @@ seal_one() {
 }
 
 # ── 并发派活：仓间无依赖，wall-clock = 最慢那个仓 ──
-declare -a PIDS=() NAMES=()
+declare -a PIDS=() NAMES=() REPOS=()
 echo "══ 并发收口$([ "${DRY}" = 1 ] && printf '（dry-run 预检）') ══"
 while IFS='|' read -r repo sub br files msg; do
   repo=$(echo "${repo}" | xargs); [ -z "${repo}" ] && continue
@@ -141,7 +158,7 @@ while IFS='|' read -r repo sub br files msg; do
   files=$(echo "${files}" | xargs); msg=$(echo "${msg}" | sed 's/^ *//;s/ *$//')
   name=$(basename "${repo}")
   ( seal_one "${repo}" "${sub}" "${br}" "${files}" "${msg}" ) > "${LOGDIR}/${name}.log" 2>&1 &
-  PIDS+=($!); NAMES+=("${name}")
+  PIDS+=($!); NAMES+=("${name}"); REPOS+=("${repo}")
   echo "  ▸ ${name}  [${sub}]  ${msg}"
 done < "${MANIFEST}"
 
@@ -151,10 +168,14 @@ declare -a RC=()
 for i in "${!PIDS[@]}"; do wait "${PIDS[$i]}"; RC+=($?); done
 
 # ── 汇总 ──
+# SEAL_RESULT_FILE 若设置，逐行写 OK|<仓路径> / FAIL|<仓路径>，供调用方按仓记账
+: > "${SEAL_RESULT_FILE:-/dev/null}"
 echo; echo "══ 汇总 ══"
 FAIL=0
 for i in "${!NAMES[@]}"; do
   n=${NAMES[$i]}; rc=${RC[$i]}
+  [ "${rc}" = 0 ] && echo "OK|${REPOS[$i]}"   >> "${SEAL_RESULT_FILE:-/dev/null}" \
+                  || echo "FAIL|${REPOS[$i]}" >> "${SEAL_RESULT_FILE:-/dev/null}"
   if [ "${rc}" = 0 ]; then
     line=$(grep '^SEALED' "${LOGDIR}/${n}.log" | head -1)
     if [ -n "${line}" ]; then

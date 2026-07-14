@@ -29,6 +29,15 @@ for s in ta tabb; do
   else bad "skills/${s}/seal.sh 缺失——单装 ${s} 时收口会失败"; fi
 done
 
+echo "══ 2b. tabb 专属脚本（ta 无 journal，不需要它）══"
+if [ -f "skills/tabb/seal-from-journal.sh" ]; then
+  ok "skills/tabb/seal-from-journal.sh 存在（从 [SEAL] 行零解析生成收口清单）"
+  bash -n skills/tabb/seal-from-journal.sh 2>/dev/null \
+    && ok "seal-from-journal.sh 语法通过" || bad "seal-from-journal.sh 语法错误"
+else
+  bad "skills/tabb/seal-from-journal.sh 缺失——git-ops 会退回用眼睛抠白名单（收口卡 6 分钟）"
+fi
+
 echo "══ 3. 不得引用对方 skill 的文件路径（跨 skill 依赖 = 单装即坏）══"
 if grep -n 'skills/tabb/' skills/ta/SKILL.md 2>/dev/null; then
   bad "ta/SKILL.md 引用了 tabb 的文件——单装 ta 时会指向不存在的路径"
