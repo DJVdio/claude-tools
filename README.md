@@ -9,11 +9,17 @@ claude-tools/
 ├── plugins/
 │   ├── ruler-engine/          Claude Code plugin，项目级规则注入引擎
 │   └── karpathy-rules/        ruler-engine 的首个消费者，4 条 Karpathy 风格行为规则
+├── scripts/
+│   └── check-skill-sync.sh    校验 ta/tabb 各自独立可安装（改任一 seal.sh 后必跑）
 └── skills/
     ├── archive-ops/           需求文档归档 + 过去经验教训读档
     ├── db-ops/                MySQL 安全操作（TEST 直连 / PROD 出 SQL）
     ├── large-file-write/      写超大文件（>1000 行）时防 socket 断开的分片策略
-    ├── ta/                    多 agent 团队编排（主 agent 当技术负责人调度 subagent 并行交付）
+    ├── ta/                    多 agent 团队编排——主从星型（主 agent 集中调度 subagent）
+    │   └── seal.sh            git 收口流水线：一条 Bash 跑完 add→commit→push→刷指针→三步核验，多仓并发
+    ├── tabb/                  多 agent 团队编排——去中心化黑板（agent 靠共享黑板自助避让文件冲突）
+    │   ├── seal.sh            同上（与 ta 的逐字一致；两套 skill 各自独立可装，谁都不依赖对方）
+    │   └── seal-from-journal.sh  从 journal 的 [SEAL] 行零解析生成收口清单 → 调 seal.sh
     └── dev-workflow/          研发全流程三件套（产品 → 全栈 → 测试）
         ├── _shared/           跨 skill 共享 reference
         ├── product-designer/  写 PRD / 拆需求 / 可行性评估
@@ -102,17 +108,40 @@ ln -s "$PWD/skills/large-file-write" ~/.claude/skills/large-file-write
 
 触发方式：Claude 遇到写大文件场景或收到 socket 错误时自动命中；也可直接说"用分片写 xxx.html"。
 
-### [ta](skills/ta/)
+### 多 agent 团队编排：[ta](skills/ta/) 与 [tabb](skills/tabb/)
 
-多 agent 团队编排规则。把一次会话变成一支开发团队：**主 agent 只当技术负责人做拆单 / 派单 / 协调 / 汇总 / 与用户交互，侦察·实现·验证·git 收口全部派给 subagent 并行执行**。核心收益：主上下文不被代码细节淹没、独立任务真并行、批次化收口可追溯。含角色编制、派单 prompt 要素、git-ops 常驻收口专员、批次收口流程、定期回报循环、异常处理手册。
+两套**平行且各自独立可安装**的编排 skill——单装任一套都完整可用，谁都不依赖对方。都只通过 `/ta` / `/tabb` 手动触发，不自动命中。
 
-**仅通过 `/ta` 手动触发，不自动命中。**
+|  | [ta](skills/ta/)（主从星型） | [tabb](skills/tabb/)（去中心化黑板） |
+|---|---|---|
+| 协调方式 | 主 agent 集中裁决，所有协调过它 | agent 通过共享黑板文件（`.tabb/`）自助协调 |
+| 硬内核 | 干净的全局台账、简单可控 | **并行改同一仓时的文件争用避让**（`mkdir` 原子锁，零主 agent 介入） |
+| 什么时候用 | 交互式持续派单，任务间文件冲突不频繁 | **多 agent 高频并行改同一仓、公共文件反复被撞** |
 
-**安装**（纯 SKILL.md，零依赖）：
+**选型第一判据是文件冲突协调的频度，不是任务数量。** 黑板不是免费的（轮询延迟、需清道夫兜死锁），只有"主 agent 成了文件协调瓶颈"这个痛点真实且高频时才值得上 tabb，否则 ta 更省心。
+
+两者都把 subagent 当执行体（侦察 / 实现 / 验证 / git 收口全部派出去），主 agent 不自己写代码。含角色编制、派单 prompt 要素、里程碑进度条、决策上抛、定期回报循环、异常处理手册。
+
+#### git 收口走 `seal.sh`，不逐条发命令
+
+两套 skill 各自带一份 **`seal.sh`**（内容逐字一致）：白名单 add → `diff --cached` 核对 → commit → fetch → 必要时 rebase（工作区脏则先 stash 隔离半成品）→ push → 刷 submodule 指针 → **三步核验**（远端头 == 预期 sha、ahead=0 behind=0），**一条 Bash 跑完，多仓并发，仓间失败隔离**。
+
+这条流水线里没有需要模型决策的分叉，逐条发 git 命令等于把它拆成 20–30 次秒级 LLM 往返（一次收口拖几分钟，多端串行十几分钟）；打包成一条 Bash 只要 1 次。LLM 只保留两个真决策：**白名单点哪些文件、commit message 写什么**。
+
+tabb 额外带 **`seal-from-journal.sh`**：干活 agent 完工时除了写给人看的长篇 `[DONE]`，还必须 append 一行机器可读的 `[SEAL]`（格式就是收口清单的一行）。于是 git-ops 一条命令收口，**零 LLM 阅读理解**——否则它得翻几百 KB 的 journal 从叙述里抠文件名，把 `seal.sh` 省下的往返又赔回去。
+
+```bash
+# tabb 的 git-ops 收口（先预检，再落地；失败后直接重跑，成功的仓自动跳过）
+bash ~/.claude/skills/tabb/seal-from-journal.sh --dry-run
+bash ~/.claude/skills/tabb/seal-from-journal.sh
+```
+
+**安装**（纯 SKILL.md + shell 脚本，零依赖；两套独立，可只装其一）：
 
 ```bash
 cd /path/to/claude-tools   # 先进入本仓库根目录（$PWD 才会指对）
-ln -s "$PWD/skills/ta" ~/.claude/skills/ta
+ln -s "$PWD/skills/ta"   ~/.claude/skills/ta
+ln -s "$PWD/skills/tabb" ~/.claude/skills/tabb
 ```
 
 ### [dev-workflow](skills/dev-workflow/)
@@ -145,6 +174,16 @@ ln -s "$PWD/test-runner"        ~/.claude/skills/test-runner
 ## 开发
 
 每个 skill / plugin 在自己子目录里独立维护。`plugins/ruler-engine/` 以 git subtree 形式嵌入，可用 `git subtree pull/push --prefix=plugins/ruler-engine <remote> main` 同步独立 repo。
+
+**改了 `skills/{ta,tabb}/` 之后必须跑一次**：
+
+```bash
+bash scripts/check-skill-sync.sh
+```
+
+它校验 ta / tabb 的「各自独立可安装」契约：两份 `seal.sh` 逐字一致、各自带齐脚本、**不引用对方 skill 的文件路径**、没有「沿用 ta，不赘述」式的悬空引用、shell 语法与变量边界地雷。
+
+为什么要这个校验：跑 `/tabb` 时**只有 `tabb/SKILL.md` 进上下文**，ta 的正文不会出现。所以跨 skill 的「沿用 ta，不赘述」对人是有效引用，**对 agent 是悬空的**——它会直接当那段内容不存在，然后自己现编一套。同理，任何指向 `~/.claude/skills/<对方>/` 的路径在单装场景下都是死链。这两类问题都实战踩过，所以固化成了可执行检查。
 
 ## License
 
