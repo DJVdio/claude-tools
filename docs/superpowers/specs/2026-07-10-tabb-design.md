@@ -122,6 +122,7 @@ skill-creator 建 `tabb` skill，产出 `skills/tabb/SKILL.md`，风格对齐现
 3. **拍板走交互**：需用户拍板的尽量用 AskUserQuestion 带推荐项选项卡。
 4. **文件锁改原子 lockfile**（取代本文「认领协议」那节的乐观锁）：`mkdir .tabb/locks/<F>` 抢、`rm -rf` 放，OS 级原子互斥——比"共享锁表 + 回读比时间戳"少一半工具往返、且根除 TOCTOU 竞态。任务队列/journal 保持文件。
 5. **idle 不回报兜底**：tabb 加了 journal 输出通道后，scout 常写完 journal 就 idle 不 return；协议块钉死"写 journal ≠ 回报、完工必 return"，回报循环再兜一道催报。
+6. **修正完工语义**：实现任务用 `[DONE]+[SEAL]`、纯只读交接任务用 `[HANDOFF]` 作为主 agent 可消费的权威持久化完成信号；子 agent 的 `【RETURN】` 最终回复是会话镜像，不再作为阻塞收口的第二个完成条件。补报请求用 `[RETURN_REQUESTED]` 记账去重；只要完工记录齐全，后续 idle 不得触发接替或重复派单。
 
 ## 性能调研：黑板该不该搬进内存？（2026-07-14，实测）
 
