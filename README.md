@@ -152,7 +152,7 @@ ln -s "$PWD/skills/tabb" ~/.claude/skills/tabb
 
 `taboc` 是一套完全独立的编排 skill：用自己的 `.taboc/` 黑板和锁，把只读、调研、机械性及低风险实现默认并发派给本机 OpenCode 免费模型；认证、支付、生产数据、架构语义等高风险任务留给 Codex/Claude。DeepSeek V4 会按任务使用 `medium/high/max`，额度或服务失败时自动轮换其他实时可见的免费模型。
 
-OpenCode worker 不占 Codex/Claude subagent 槽，可同时使用两边的并发能力。`taboc` 自带权限隔离、状态聚合与收口脚本，不读取 `ta` 或 `tabb` 的文件。
+OpenCode worker 不占 Codex/Claude subagent 槽，可同时使用两边的并发能力。`taboc` 使用一次性 LaunchAgent，自带权限隔离、结构化错误判定、模型/努力程度任务面板、状态聚合与收口脚本，不读取 `ta` 或 `tabb` 的文件。
 
 ```bash
 cd /path/to/claude-tools

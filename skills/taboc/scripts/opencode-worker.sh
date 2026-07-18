@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {
   echo "usage: opencode-worker.sh --repo PATH --id ID --profile readonly|simple --effort low|medium|high|max|xhigh --prompt-file PATH" >&2
@@ -140,9 +141,10 @@ cleanup_owned_locks() {
   done
 }
 
-is_retryable_failure() {
-  local FILE="$1"
-  rg -qi '(^|[^0-9])(402|429)([^0-9]|$)|quota|rate.?limit|usage.?limit|credit|capacity|overload|model.+(unavailable|not found|disabled)|ECONNRESET|ETIMEDOUT|ENOTFOUND|stream error|empty response|temporarily unavailable' "${FILE}"
+journal_has_since() {
+  local START_LINE="$1"
+  local PREFIX="$2"
+  awk -v start="${START_LINE}" -v prefix="${PREFIX}" 'NR > start && index($0, prefix) == 1 {found=1; exit} END {exit(found ? 0 : 1)}' "${JOURNAL}"
 }
 
 MODEL=""
@@ -150,12 +152,16 @@ VARIANT=""
 ATTEMPT=0
 MAX_ATTEMPTS="${TABOC_MAX_ATTEMPTS:-8}"
 PREVIOUS=""
+LAST_MODEL="-"
+LAST_VARIANT="-"
 
 while IFS= read -r MODEL; do
   [ -n "${MODEL}" ] || continue
   ATTEMPT=$((ATTEMPT + 1))
   [ "${ATTEMPT}" -le "${MAX_ATTEMPTS}" ] || break
   VARIANT="$(choose_variant "${MODEL}" "${EFFORT}")"
+  LAST_MODEL="${MODEL}"
+  LAST_VARIANT="${VARIANT:-default}"
   ATTEMPT_LOG="${STATE_DIR}/attempts/${WORKER_ID}.${ATTEMPT}.log"
   printf 'running|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${ATTEMPT}" > "${STATUS_FILE}"
   if [ -n "${PREVIOUS}" ]; then
@@ -165,21 +171,43 @@ while IFS= read -r MODEL; do
   COMMAND=("${OPENCODE_BIN}" run --dir "${REPO}" --model "${MODEL}" --format json --title "taboc-${WORKER_ID}")
   [ -n "${VARIANT}" ] && COMMAND+=(--variant "${VARIANT}")
   COMMAND+=("$(<"${PROMPT_FILE}")")
+  JOURNAL_START="$(wc -l < "${JOURNAL}" | tr -d ' ')"
 
   set +e
   OPENCODE_PERMISSION="${PERMISSIONS}" OPENCODE_DISABLE_AUTOUPDATE=true OPENCODE_AUTO_SHARE=false "${COMMAND[@]}" > "${ATTEMPT_LOG}" 2>&1
   CODE=$?
   set -e
+  CLASSIFICATION="$(python3 "${SCRIPT_DIR}/classify-opencode-log.py" "${ATTEMPT_LOG}")"
 
-  if [ "${CODE}" -eq 0 ] && ! is_retryable_failure "${ATTEMPT_LOG}"; then
+  if { [ "${PROFILE}" = "readonly" ] && journal_has_since "${JOURNAL_START}" "[HANDOFF] ${WORKER_ID} →"; } \
+    || { [ "${PROFILE}" = "simple" ] && journal_has_since "${JOURNAL_START}" "[DONE] ${WORKER_ID} |"; }; then
     printf 'done|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${ATTEMPT}" > "${STATUS_FILE}"
     exit 0
+  fi
+
+  if journal_has_since "${JOURNAL_START}" "[DECISION] ${WORKER_ID} |"; then
+    printf 'decision|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${ATTEMPT}" > "${STATUS_FILE}"
+    exit 0
+  fi
+
+  if [ "${CLASSIFICATION}" = "error" ]; then
+    cleanup_owned_locks
+    printf 'failed|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${ATTEMPT}" > "${STATUS_FILE}"
+    printf '[WORKER_FAILED] %s | non-retryable top-level OpenCode error | inspect %s\n' "${WORKER_ID}" "${ATTEMPT_LOG}" >> "${JOURNAL}"
+    exit 1
+  fi
+
+  if [ "${CODE}" -eq 0 ] && [ "${CLASSIFICATION}" = "clean" ]; then
+    cleanup_owned_locks
+    printf 'incomplete|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${ATTEMPT}" > "${STATUS_FILE}"
+    printf '[WORKER_INCOMPLETE] %s | clean exit but no terminal journal record | resume once; do not switch model automatically\n' "${WORKER_ID}" >> "${JOURNAL}"
+    exit 76
   fi
 
   cleanup_owned_locks
   PREVIOUS="${MODEL}:${VARIANT:-default}"
 done < <(build_candidates)
 
-printf 'exhausted|-|-|%s\n' "${ATTEMPT}" > "${STATUS_FILE}"
+printf 'exhausted|%s|%s|%s\n' "${LAST_MODEL}" "${LAST_VARIANT}" "${ATTEMPT}" > "${STATUS_FILE}"
 printf '[MODEL_EXHAUSTED] %s | tried=%s | inspect %s/attempts/%s.*.log\n' "${WORKER_ID}" "${ATTEMPT}" "${STATE_DIR}" "${WORKER_ID}" >> "${JOURNAL}"
 exit 75

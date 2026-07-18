@@ -6,7 +6,7 @@ TEST_ROOT="$(mktemp -d)"
 cleanup() {
   for LABEL_FILE in "${REPO}"/.taboc/opencode/*.label; do
     [ -f "${LABEL_FILE}" ] || continue
-    launchctl remove "$(cat "${LABEL_FILE}")" 2>/dev/null || true
+    launchctl bootout "gui/$(id -u)/$(cat "${LABEL_FILE}")" 2>/dev/null || true
   done
   rm -rf "${TEST_ROOT}"
 }
@@ -51,4 +51,36 @@ done
 grep -Fq 'done|opencode/deepseek-v4-flash-free|medium|1' "${REPO}/.taboc/opencode/scout-two.status"
 [ ! -d "${REPO}/.taboc/opencode/scout-two.run" ]
 
-echo "PASS: variant probing, free-model fallback, readonly permissions, launchd survival"
+# KeepAlive=false: a completed job must not be relaunched.
+SCOUT_TWO_CALLS="$(grep -Fc 'opencode/deepseek-v4-flash-free|medium|' "${REPO}/.taboc/mock-calls.log")"
+sleep 1.2
+[ "$(grep -Fc 'opencode/deepseek-v4-flash-free|medium|' "${REPO}/.taboc/mock-calls.log")" = "${SCOUT_TWO_CALLS}" ]
+
+# A task body mentioning quota-like words is not an OpenCode error event.
+printf '%s\n' '{"type":"text","text":"402 429 quota Capacity overload credit"}' > "${TEST_ROOT}/clean.jsonl"
+[ "$(python3 "${SKILL_DIR}/scripts/classify-opencode-log.py" "${TEST_ROOT}/clean.jsonl")" = clean ]
+printf '%s\n' '{"type":"error","error":"429 quota exceeded"}' > "${TEST_ROOT}/retryable.jsonl"
+[ "$(python3 "${SKILL_DIR}/scripts/classify-opencode-log.py" "${TEST_ROOT}/retryable.jsonl")" = retryable ]
+
+# The panel exposes requested/actual OpenCode routing and exact premium routing.
+cat > "${REPO}/.taboc/board.md" <<'EOF'
+| Task | Claimed By | Pool | Status |
+|---|---|---|---|
+| scout-two | scout-two | opencode | claimed |
+| risky-fix | premium-one | premium | running |
+EOF
+bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task risky-fix \
+  --agent premium-one --pool premium --model codex/gpt-5.6-sol --effort high
+PANEL="$(bash "${SKILL_DIR}/scripts/task-panel.sh" --repo "${REPO}")"
+printf '%s\n' "${PANEL}" | grep -Fq '| scout-two | scout-two | opencode | opencode/deepseek-v4-flash-free | medium | done |'
+printf '%s\n' "${PANEL}" | grep -Fq '| risky-fix | premium-one | premium | codex/gpt-5.6-sol | high | running |'
+
+# A terminal journal record prevents accidental duplicate launches.
+if bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
+  --repo "${REPO}" --id scout-two --profile readonly --effort medium \
+  --prompt-file "${TEST_ROOT}/prompt.txt" >/dev/null 2>&1; then
+  echo "duplicate launch unexpectedly succeeded" >&2
+  exit 1
+fi
+
+echo "PASS: fallback, structured errors, one-shot launchd, duplicate guard, model-effort panel"

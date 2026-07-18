@@ -32,13 +32,15 @@ if [ "${1:-}" = "run" ]; then
   MODEL=""
   VARIANT=""
   REPO=""
+  TITLE=""
   shift
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --model) MODEL="$2"; shift 2 ;;
       --variant) VARIANT="$2"; shift 2 ;;
       --dir) REPO="$2"; shift 2 ;;
-      --format|--title) shift 2 ;;
+      --title) TITLE="$2"; shift 2 ;;
+      --format) shift 2 ;;
       *) shift ;;
     esac
   done
@@ -47,6 +49,10 @@ if [ "${1:-}" = "run" ]; then
   if [ "${MODEL}" = "opencode/deepseek-v4-flash-free" ] && [ -f "${REPO}/.taboc/mock-deepseek-fail" ]; then
     echo '{"type":"error","error":"429 quota exceeded"}'
     exit 1
+  fi
+  WORKER_ID="${TITLE#taboc-}"
+  if [ ! -f "${REPO}/.taboc/mock-no-terminal" ]; then
+    printf '[HANDOFF] %s → root | mock complete\n' "${WORKER_ID}" >> "${REPO}/.taboc/journal.md"
   fi
   echo '{"type":"text","text":"done"}'
   exit 0

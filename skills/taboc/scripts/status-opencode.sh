@@ -19,7 +19,7 @@ for STATUS_FILE in "${REPO}"/.taboc/opencode/*.status; do
   LABEL="$(cat "${REPO}/.taboc/opencode/${WORKER_ID}.label" 2>/dev/null || true)"
   if [ -n "${LABEL}" ] && command -v launchctl >/dev/null 2>&1; then
     LAUNCH_PID="$(launchctl list 2>/dev/null | awk -v label="${LABEL}" '$3 == label {print $1; exit}')"
-    if [ -n "${LAUNCH_PID}" ]; then
+    if [ -n "${LAUNCH_PID}" ] && [ "${LAUNCH_PID}" != "-" ]; then
       PID="${LAUNCH_PID}"
     fi
   fi
