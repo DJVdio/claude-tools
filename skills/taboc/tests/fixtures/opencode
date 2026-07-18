@@ -2,6 +2,12 @@
 set -euo pipefail
 
 if [ "${1:-}" = "models" ]; then
+  [ "${TABOC_MOCK_MODELS_EMPTY:-}" = 1 ] && exit 75
+  if [ -n "${TABOC_MOCK_DB_LOCK_DIR:-}" ]; then
+    mkdir "${TABOC_MOCK_DB_LOCK_DIR}" 2>/dev/null || { echo 'database is locked' >&2; exit 75; }
+    trap 'rmdir "${TABOC_MOCK_DB_LOCK_DIR}" 2>/dev/null || true' EXIT
+    sleep 0.1
+  fi
   if [ "${3:-}" = "--verbose" ] || [ "${2:-}" = "--verbose" ]; then
     cat <<'EOF'
 opencode/deepseek-v4-flash-free
@@ -44,13 +50,26 @@ if [ "${1:-}" = "run" ]; then
       *) shift ;;
     esac
   done
-  printf '%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${OPENCODE_PERMISSION:-}" >> "${REPO}/.taboc/mock-calls.log"
+  if [ -n "${TABOC_MOCK_RUN_DB_LOCK_DIR:-}" ]; then
+    mkdir "${TABOC_MOCK_RUN_DB_LOCK_DIR}" 2>/dev/null || { echo 'database is locked' >&2; exit 75; }
+    trap 'rmdir "${TABOC_MOCK_RUN_DB_LOCK_DIR}" 2>/dev/null || true' EXIT
+    sleep 0.15
+  fi
+  printf '%s|%s|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${OPENCODE_PERMISSION:-}" \
+    "${TABOC_MODELS:-}" "${TABOC_MAX_ATTEMPTS:-}" >> "${REPO}/.taboc/mock-calls.log"
   [ -f "${REPO}/.taboc/mock-sleep" ] && sleep 1
+  if [ "${MODEL}" = "opencode/deepseek-v4-flash-free" ] && [ -f "${REPO}/.taboc/mock-deepseek-hang" ]; then
+    sleep 5
+  fi
   if [ "${MODEL}" = "opencode/deepseek-v4-flash-free" ] && [ -f "${REPO}/.taboc/mock-deepseek-fail" ]; then
     echo '{"type":"error","error":"429 quota exceeded"}'
     exit 1
   fi
   WORKER_ID="${TITLE#taboc-}"
+  if [ -f "${REPO}/.taboc/mock-output-only" ]; then
+    printf '{"type":"text","part":{"text":"[HANDOFF] %s → root | recovered from final output"}}\n' "${WORKER_ID}"
+    exit 0
+  fi
   if [ ! -f "${REPO}/.taboc/mock-no-terminal" ]; then
     printf '[HANDOFF] %s → root | mock complete\n' "${WORKER_ID}" >> "${REPO}/.taboc/journal.md"
   fi

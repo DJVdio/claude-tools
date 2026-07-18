@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 from collections import OrderedDict
 from pathlib import Path
 
@@ -51,6 +52,20 @@ def statuses(directory: Path) -> dict[str, dict[str, str]]:
         if len(cells) < 4:
             continue
         state, model, effort, attempt = cells[:4]
+        if state in {"running", "launched"}:
+            pid_path = directory / f"{path.stem}.pid"
+            run_lock = directory / f"{path.stem}.run"
+            if not run_lock.exists():
+                state = "lost"
+            else:
+                try:
+                    pid = int(pid_path.read_text(encoding="utf-8").strip())
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    state = "lost"
+                except (OSError, ValueError):
+                    if state == "running":
+                        state = "lost"
         result[path.stem] = {"state": state, "model": model, "effort": effort, "attempt": attempt}
     return result
 

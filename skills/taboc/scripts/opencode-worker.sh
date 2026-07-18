@@ -40,9 +40,14 @@ RUN_LOCK="${TABOC_RUN_LOCK:-${STATE_DIR}/${WORKER_ID}.run}"
 cleanup_runtime() {
   rmdir "${RUN_LOCK}" 2>/dev/null || true
 }
+handle_signal() {
+  local CODE="$1"
+  printf 'stopped|%s|%s|%s\n' "${MODEL:--}" "${VARIANT:--}" "${ATTEMPT:-0}" > "${STATUS_FILE}"
+  exit "${CODE}"
+}
 trap cleanup_runtime EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM HUP
+trap 'handle_signal 130' INT
+trap 'handle_signal 143' TERM HUP
 printf '%s\n' "$$" > "${PID_FILE}"
 
 resolve_opencode_bin() {
@@ -79,18 +84,49 @@ else
 fi
 
 available_models() {
-  "${OPENCODE_BIN}" models opencode 2>/dev/null | awk '/^opencode\/.+-free$/ {print}'
+  local OUTPUT=""
+  OUTPUT="$(query_models || true)"
+  printf '%s\n' "${OUTPUT}" | awk '/^opencode\/.+-free$/ {print}'
 }
 
 supports_variant() {
   local MODEL="$1"
   local VARIANT="$2"
-  "${OPENCODE_BIN}" models opencode --verbose 2>/dev/null | awk -v target="${MODEL}" -v variant="\"${VARIANT}\"" '
+  local OUTPUT=""
+  OUTPUT="$(query_models --verbose || true)"
+  printf '%s\n' "${OUTPUT}" | awk -v target="${MODEL}" -v variant="\"${VARIANT}\"" '
     $0 == target {inside=1; next}
     inside && /^opencode\// {exit}
     inside && index($0, variant ":") {found=1}
     END {exit(found ? 0 : 1)}
   '
+}
+
+query_models() {
+  local LOCK="${STATE_DIR}/model-query.lock"
+  local OWNER=""
+  local OUTPUT=""
+  local WAITED=0
+  while ! mkdir "${LOCK}" 2>/dev/null; do
+    OWNER="$(cat "${LOCK}/owner" 2>/dev/null || true)"
+    if [ -n "${OWNER}" ] && ! kill -0 "${OWNER}" 2>/dev/null; then
+      rm -f "${LOCK}/owner" 2>/dev/null || true
+      rmdir "${LOCK}" 2>/dev/null || true
+      continue
+    fi
+    WAITED=$((WAITED + 1))
+    [ "${WAITED}" -lt 300 ] || return 75
+    sleep 0.1
+  done
+  printf '%s\n' "$$" > "${LOCK}/owner"
+  if OUTPUT="$("${OPENCODE_BIN}" models opencode "$@" 2>/dev/null)"; then
+    :
+  else
+    OUTPUT=""
+  fi
+  rm -f "${LOCK}/owner"
+  rmdir "${LOCK}" 2>/dev/null || true
+  printf '%s\n' "${OUTPUT}"
 }
 
 choose_variant() {
@@ -120,6 +156,10 @@ build_candidates() {
     return
   fi
   FOUND="$(available_models)"
+  if [ -z "${FOUND}" ]; then
+    printf '%s\n' "${DEFAULTS}" | tr ' ' '\n'
+    return
+  fi
   for MODEL in ${DEFAULTS}; do
     printf '%s\n' "${FOUND}" | grep -Fxq "${MODEL}" && echo "${MODEL}"
   done
@@ -147,6 +187,12 @@ journal_has_since() {
   awk -v start="${START_LINE}" -v prefix="${PREFIX}" 'NR > start && index($0, prefix) == 1 {found=1; exit} END {exit(found ? 0 : 1)}' "${JOURNAL}"
 }
 
+journal_has_exact_since() {
+  local START_LINE="$1"
+  local RECORD="$2"
+  awk -v start="${START_LINE}" -v record="${RECORD}" 'NR > start && $0 == record {found=1; exit} END {exit(found ? 0 : 1)}' "${JOURNAL}"
+}
+
 MODEL=""
 VARIANT=""
 ATTEMPT=0
@@ -154,6 +200,12 @@ MAX_ATTEMPTS="${TABOC_MAX_ATTEMPTS:-8}"
 PREVIOUS=""
 LAST_MODEL="-"
 LAST_VARIANT="-"
+ATTEMPT_TIMEOUT="${TABOC_ATTEMPT_TIMEOUT:-300}"
+STARTUP_HOLD="${TABOC_STARTUP_HOLD:-1.5}"
+case "${ATTEMPT_TIMEOUT}" in ''|*[!0-9]*) ATTEMPT_TIMEOUT=300 ;; esac
+[ "${ATTEMPT_TIMEOUT}" -gt 0 ] || ATTEMPT_TIMEOUT=300
+case "${MAX_ATTEMPTS}" in ''|*[!0-9]*) MAX_ATTEMPTS=8 ;; esac
+[ "${MAX_ATTEMPTS}" -gt 0 ] || MAX_ATTEMPTS=8
 
 while IFS= read -r MODEL; do
   [ -n "${MODEL}" ] || continue
@@ -174,9 +226,17 @@ while IFS= read -r MODEL; do
   JOURNAL_START="$(wc -l < "${JOURNAL}" | tr -d ' ')"
 
   set +e
-  OPENCODE_PERMISSION="${PERMISSIONS}" OPENCODE_DISABLE_AUTOUPDATE=true OPENCODE_AUTO_SHARE=false "${COMMAND[@]}" > "${ATTEMPT_LOG}" 2>&1
+  OPENCODE_PERMISSION="${PERMISSIONS}" OPENCODE_DISABLE_AUTOUPDATE=true OPENCODE_AUTO_SHARE=false \
+    python3 "${SCRIPT_DIR}/run-with-timeout.py" --timeout "${ATTEMPT_TIMEOUT}" \
+      --log "${ATTEMPT_LOG}" --startup-lock "${STATE_DIR}/startup.lock" \
+      --startup-hold "${STARTUP_HOLD}" -- "${COMMAND[@]}"
   CODE=$?
   set -e
+  TERMINAL_RECORD="$(python3 "${SCRIPT_DIR}/extract-terminal-record.py" \
+    --log "${ATTEMPT_LOG}" --worker "${WORKER_ID}" --profile "${PROFILE}" || true)"
+  if [ -n "${TERMINAL_RECORD}" ] && ! journal_has_exact_since "${JOURNAL_START}" "${TERMINAL_RECORD}"; then
+    printf '%s\n' "${TERMINAL_RECORD}" >> "${JOURNAL}"
+  fi
   CLASSIFICATION="$(python3 "${SCRIPT_DIR}/classify-opencode-log.py" "${ATTEMPT_LOG}")"
 
   if { [ "${PROFILE}" = "readonly" ] && journal_has_since "${JOURNAL_START}" "[HANDOFF] ${WORKER_ID} →"; } \

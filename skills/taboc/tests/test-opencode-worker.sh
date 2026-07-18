@@ -33,6 +33,49 @@ grep -Fq '[MODEL_FALLBACK] scout-one' "${REPO}/.taboc/journal.md"
 grep -Fq 'done|opencode/nemotron-3-ultra-free|high|2' "${REPO}/.taboc/opencode/scout-one.status"
 
 rm "${REPO}/.taboc/mock-deepseek-fail"
+
+# Empty/failed model discovery falls back to known free candidates instead of tried=0.
+TABOC_MOCK_MODELS_EMPTY=1 bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
+  --repo "${REPO}" --id scout-discovery --profile readonly --effort medium \
+  --prompt-file "${TEST_ROOT}/prompt.txt"
+grep -Fq 'done|opencode/deepseek-v4-flash-free|default|1' "${REPO}/.taboc/opencode/scout-discovery.status"
+
+# A hung model is terminated and the next approved free model receives the task.
+touch "${REPO}/.taboc/mock-deepseek-hang"
+TABOC_ATTEMPT_TIMEOUT=1 TABOC_STARTUP_HOLD=0 \
+TABOC_MODELS='opencode/deepseek-v4-flash-free,opencode/nemotron-3-ultra-free' \
+  bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
+    --repo "${REPO}" --id scout-timeout --profile readonly --effort high \
+    --prompt-file "${TEST_ROOT}/prompt.txt"
+rm "${REPO}/.taboc/mock-deepseek-hang"
+grep -Fq 'done|opencode/nemotron-3-ultra-free|high|2' "${REPO}/.taboc/opencode/scout-timeout.status"
+grep -Fq 'TabocAttemptTimeout' "${REPO}/.taboc/opencode/attempts/scout-timeout.1.log"
+
+# Exact terminal records printed only in final JSON are safely materialized into journal.
+touch "${REPO}/.taboc/mock-output-only"
+bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
+  --repo "${REPO}" --id scout-output --profile readonly --effort medium \
+  --prompt-file "${TEST_ROOT}/prompt.txt"
+rm "${REPO}/.taboc/mock-output-only"
+grep -Fq '[HANDOFF] scout-output → root | recovered from final output' "${REPO}/.taboc/journal.md"
+grep -Fq 'done|opencode/deepseek-v4-flash-free|medium|1' "${REPO}/.taboc/opencode/scout-output.status"
+
+# Concurrent model queries and run cold starts are briefly serialized to avoid OpenCode's shared SQLite lock.
+TABOC_MOCK_DB_LOCK_DIR="${REPO}/.taboc/mock-db-lock" \
+TABOC_MOCK_RUN_DB_LOCK_DIR="${REPO}/.taboc/mock-run-db-lock" TABOC_STARTUP_HOLD=0.3 \
+  bash "${SKILL_DIR}/scripts/opencode-worker.sh" --repo "${REPO}" --id concurrent-a \
+    --profile readonly --effort medium --prompt-file "${TEST_ROOT}/prompt.txt" &
+CONCURRENT_A=$!
+TABOC_MOCK_DB_LOCK_DIR="${REPO}/.taboc/mock-db-lock" \
+TABOC_MOCK_RUN_DB_LOCK_DIR="${REPO}/.taboc/mock-run-db-lock" TABOC_STARTUP_HOLD=0.3 \
+  bash "${SKILL_DIR}/scripts/opencode-worker.sh" --repo "${REPO}" --id concurrent-b \
+    --profile readonly --effort medium --prompt-file "${TEST_ROOT}/prompt.txt" &
+CONCURRENT_B=$!
+wait "${CONCURRENT_A}"
+wait "${CONCURRENT_B}"
+grep -Fq 'done|' "${REPO}/.taboc/opencode/concurrent-a.status"
+grep -Fq 'done|' "${REPO}/.taboc/opencode/concurrent-b.status"
+
 touch "${REPO}/.taboc/mock-sleep"
 bash "${SKILL_DIR}/scripts/launch-opencode.sh" --check | grep -Fq "ready|${MOCK_BIN}/opencode|"
 bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
@@ -56,6 +99,19 @@ SCOUT_TWO_CALLS="$(grep -Fc 'opencode/deepseek-v4-flash-free|medium|' "${REPO}/.
 sleep 1.2
 [ "$(grep -Fc 'opencode/deepseek-v4-flash-free|medium|' "${REPO}/.taboc/mock-calls.log")" = "${SCOUT_TWO_CALLS}" ]
 
+# LaunchAgent receives model and attempt overrides from the launcher environment.
+rm "${REPO}/.taboc/mock-sleep"
+TABOC_MODELS=opencode/nemotron-3-ultra-free TABOC_MAX_ATTEMPTS=1 TABOC_STARTUP_HOLD=0 \
+  bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
+    --repo "${REPO}" --id scout-env --profile readonly --effort medium \
+    --prompt-file "${TEST_ROOT}/prompt.txt" >/dev/null
+for _ in $(seq 1 30); do
+  grep -Fq 'done|opencode/nemotron-3-ultra-free|medium|1' "${REPO}/.taboc/opencode/scout-env.status" 2>/dev/null && break
+  sleep 0.1
+done
+grep -Fq 'done|opencode/nemotron-3-ultra-free|medium|1' "${REPO}/.taboc/opencode/scout-env.status"
+grep -Fq 'opencode/nemotron-3-ultra-free|medium|' "${REPO}/.taboc/mock-calls.log"
+
 # A task body mentioning quota-like words is not an OpenCode error event.
 printf '%s\n' '{"type":"text","text":"402 429 quota Capacity overload credit"}' > "${TEST_ROOT}/clean.jsonl"
 [ "$(python3 "${SKILL_DIR}/scripts/classify-opencode-log.py" "${TEST_ROOT}/clean.jsonl")" = clean ]
@@ -68,13 +124,17 @@ cat > "${REPO}/.taboc/board.md" <<'EOF'
 |---|---|---|---|
 | scout-two | scout-two | opencode | claimed |
 | risky-fix | premium-one | premium | running |
+| stale-worker | stale-worker | opencode | running |
 EOF
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task risky-fix \
   --agent premium-one --pool premium --model luna --effort high \
   --main-model luna --main-effort max
+printf 'running|opencode/deepseek-v4-flash-free|high|1\n' > "${REPO}/.taboc/opencode/stale-worker.status"
+printf '99999999\n' > "${REPO}/.taboc/opencode/stale-worker.pid"
 PANEL="$(bash "${SKILL_DIR}/scripts/task-panel.sh" --repo "${REPO}")"
 printf '%s\n' "${PANEL}" | grep -Fq '| scout-two | scout-two | opencode | opencode/deepseek-v4-flash-free | medium | done |'
 printf '%s\n' "${PANEL}" | grep -Fq '| risky-fix | premium-one | premium | luna | high | running |'
+printf '%s\n' "${PANEL}" | grep -Fq '| stale-worker | stale-worker | opencode | opencode/deepseek-v4-flash-free | high | lost |'
 
 # A terminal journal record prevents accidental duplicate launches.
 if bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
@@ -98,4 +158,4 @@ if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task ef
   exit 1
 fi
 
-echo "PASS: fallback, structured errors, one-shot launchd, duplicate guard, premium parent ceiling, model-effort panel"
+echo "PASS: timeout fallback, concurrent startup, env forwarding, terminal recovery, premium ceiling, live task panel"

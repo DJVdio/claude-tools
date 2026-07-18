@@ -101,6 +101,10 @@ fi
 
 LOG_FILE="${STATE_DIR}/${WORKER_ID}.launcher.log"
 LAUNCH_PATH="$(dirname "${OPENCODE_BIN}"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+ENV_ARGS=()
+for ENV_NAME in TABOC_MODELS TABOC_MAX_ATTEMPTS TABOC_ATTEMPT_TIMEOUT TABOC_STARTUP_HOLD; do
+  [ -n "${!ENV_NAME:-}" ] && ENV_ARGS+=("${ENV_NAME}=${!ENV_NAME}")
+done
 printf 'launched|pending|pending|0\n' > "${STATUS_FILE}"
 printf '%s\n' "${LABEL}" > "${LABEL_FILE}"
 : > "${LOG_FILE}"
@@ -108,6 +112,7 @@ printf '%s\n' "${LABEL}" > "${LABEL_FILE}"
 launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
 python3 "${SCRIPT_DIR}/write-launch-plist.py" --output "${PLIST_FILE}" --label "${LABEL}" --log "${LOG_FILE}" -- \
   /usr/bin/env "TABOC_OPENCODE_BIN=${OPENCODE_BIN}" "TABOC_RUN_LOCK=${RUN_LOCK}" \
+  "${ENV_ARGS[@]}" \
   "PATH=${LAUNCH_PATH}" "HOME=${HOME}" "TMPDIR=${TMPDIR:-/tmp}" \
   /bin/bash "${SCRIPT_DIR}/opencode-worker.sh" --repo "${REPO}" --id "${WORKER_ID}" \
   --profile "${PROFILE}" --effort "${EFFORT}" --prompt-file "${PROMPT_FILE}"
