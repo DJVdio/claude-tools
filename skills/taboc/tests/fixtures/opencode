@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${1:-}" = "models" ]; then
+  if [ "${3:-}" = "--verbose" ] || [ "${2:-}" = "--verbose" ]; then
+    cat <<'EOF'
+opencode/deepseek-v4-flash-free
+{
+  "variants": {
+    "low": {},
+    "medium": {},
+    "high": {},
+    "max": {}
+  }
+}
+opencode/nemotron-3-ultra-free
+{
+  "variants": {
+    "low": {},
+    "medium": {},
+    "high": {}
+  }
+}
+EOF
+  else
+    printf '%s\n' 'opencode/deepseek-v4-flash-free' 'opencode/nemotron-3-ultra-free'
+  fi
+  exit 0
+fi
+
+if [ "${1:-}" = "run" ]; then
+  MODEL=""
+  VARIANT=""
+  shift
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --model) MODEL="$2"; shift 2 ;;
+      --variant) VARIANT="$2"; shift 2 ;;
+      --dir|--format|--title) shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  printf '%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${OPENCODE_PERMISSION:-}" >> "${MOCK_CALLS}"
+  if [ "${MODEL}" = "opencode/deepseek-v4-flash-free" ] && [ "${MOCK_DEEPSEEK_FAIL:-0}" = "1" ]; then
+    echo '{"type":"error","error":"429 quota exceeded"}'
+    exit 1
+  fi
+  echo '{"type":"text","text":"done"}'
+  exit 0
+fi
+
+exit 2

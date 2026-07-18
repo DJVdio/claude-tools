@@ -1,0 +1,4 @@
+interface:
+  display_name: "Taboc"
+  short_description: "用免费 OpenCode worker 扩展并发并节省高级模型额度"
+  default_prompt: "Use $taboc to route this work across OpenCode and premium agents by risk."

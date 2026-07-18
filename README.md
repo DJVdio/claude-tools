@@ -20,6 +20,10 @@ claude-tools/
     ├── tabb/                  多 agent 团队编排——去中心化黑板（agent 靠共享黑板自助避让文件冲突）
     │   ├── seal.sh            同上（与 ta 的逐字一致；两套 skill 各自独立可装，谁都不依赖对方）
     │   └── seal-from-journal.sh  从 journal 的 [SEAL] 行零解析生成收口清单 → 调 seal.sh
+    ├── taboc/                 异构多 agent 编排——OpenCode 免费模型优先，高风险任务升级高级模型
+    │   ├── scripts/           OpenCode 后台启动、模型/档位探测、免费模型轮换、状态聚合
+    │   ├── seal.sh            taboc 自带的独立 git 收口流水线
+    │   └── seal-from-journal.sh  从独立 .taboc/journal.md 收口
     └── dev-workflow/          研发全流程三件套（产品 → 全栈 → 测试）
         ├── _shared/           跨 skill 共享 reference
         ├── product-designer/  写 PRD / 拆需求 / 可行性评估
@@ -144,6 +148,24 @@ ln -s "$PWD/skills/ta"   ~/.claude/skills/ta
 ln -s "$PWD/skills/tabb" ~/.claude/skills/tabb
 ```
 
+### 异构模型编排：[taboc](skills/taboc/)
+
+`taboc` 是一套完全独立的编排 skill：用自己的 `.taboc/` 黑板和锁，把只读、调研、机械性及低风险实现默认并发派给本机 OpenCode 免费模型；认证、支付、生产数据、架构语义等高风险任务留给 Codex/Claude。DeepSeek V4 会按任务使用 `medium/high/max`，额度或服务失败时自动轮换其他实时可见的免费模型。
+
+OpenCode worker 不占 Codex/Claude subagent 槽，可同时使用两边的并发能力。`taboc` 自带权限隔离、状态聚合与收口脚本，不读取 `ta` 或 `tabb` 的文件。
+
+```bash
+cd /path/to/claude-tools
+ln -s "$PWD/skills/taboc" ~/.claude/skills/taboc
+# Codex 安装则链接到 ~/.codex/skills/taboc
+```
+
+仅通过 `/taboc` 手动触发。开发校验：
+
+```bash
+bash scripts/check-taboc-contract.sh
+```
+
 ### [dev-workflow](skills/dev-workflow/)
 
 **研发全流程三件套**：`product-designer` → `fullstack-builder` → `test-runner`，把一个子需求的 PRD / 可行性 / 实现 / self-review / 改动总结 / 测试用例 / 测试报告全部产出到同一目录。
@@ -180,6 +202,7 @@ ln -s "$PWD/test-runner"        ~/.claude/skills/test-runner
 ```bash
 bash scripts/check-skill-sync.sh
 bash scripts/check-tabb-contract.sh  # 改 tabb 时额外跑：体积预算 + 核心能力回归
+bash scripts/check-taboc-contract.sh # 改 taboc 时额外跑：独立性 + 路由 + 权限 + 模型回退
 ```
 
 `check-skill-sync.sh` 校验 ta / tabb 的「各自独立可安装」契约：两份 `seal.sh` 逐字一致、各自带齐脚本、**不引用对方 skill 的文件路径**、没有「沿用 ta，不赘述」式的悬空引用、shell 语法与变量边界地雷。`check-tabb-contract.sh` 限制 tabb prompt 体积，并守住原子锁、交接、决策上抛、idle 防重派、分层测试和收口门禁。
