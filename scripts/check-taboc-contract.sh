@@ -27,6 +27,9 @@ rg -q 'gate=<命中的具体门禁>' skills/taboc/SKILL.md && ok "高级模型�
 rg -q 'medium.*high.*max' skills/taboc/SKILL.md && ok "思考档位分级存在" || bad "缺少思考档位分级"
 rg -q 'TABOC_MODELS' skills/taboc/scripts/opencode-worker.sh && ok "支持模型候选覆盖" || bad "缺少模型候选覆盖"
 rg -q 'rm -rf \*.*deny' skills/taboc/scripts/opencode-worker.sh && ok "实现 worker 禁递归删除" || bad "缺少递归删除门禁"
+rg -q 'launchctl submit' skills/taboc/scripts/launch-opencode.sh && ok "worker 由 launchd 托管" || bad "缺少脱离工具进程组的启动机制"
+rg -q '/opt/homebrew/bin/opencode' skills/taboc/scripts/launch-opencode.sh && ok "主动探测 Homebrew OpenCode" || bad "仍只依赖 PATH"
+rg -q '\[POOL_BLOCKED\].*do not upgrade' skills/taboc/scripts/launch-opencode.sh && ok "环境故障禁止批量升级" || bad "缺少执行池阻塞门禁"
 
 bash skills/taboc/tests/test-opencode-worker.sh || FAIL=1
 

@@ -21,7 +21,7 @@ claude-tools/
     │   ├── seal.sh            同上（与 ta 的逐字一致；两套 skill 各自独立可装，谁都不依赖对方）
     │   └── seal-from-journal.sh  从 journal 的 [SEAL] 行零解析生成收口清单 → 调 seal.sh
     ├── taboc/                 异构多 agent 编排——OpenCode 免费模型优先，高风险任务升级高级模型
-    │   ├── scripts/           OpenCode 后台启动、模型/档位探测、免费模型轮换、状态聚合
+    │   ├── scripts/           launchd 后台启动、模型/档位探测、免费模型轮换、状态聚合
     │   ├── seal.sh            taboc 自带的独立 git 收口流水线
     │   └── seal-from-journal.sh  从独立 .taboc/journal.md 收口
     └── dev-workflow/          研发全流程三件套（产品 → 全栈 → 测试）

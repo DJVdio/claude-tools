@@ -16,8 +16,17 @@ for STATUS_FILE in "${REPO}"/.taboc/opencode/*.status; do
   WORKER_ID="$(basename "${STATUS_FILE}" .status)"
   IFS='|' read -r STATE MODEL VARIANT ATTEMPT < "${STATUS_FILE}"
   PID="$(cat "${REPO}/.taboc/opencode/${WORKER_ID}.pid" 2>/dev/null || true)"
+  LABEL="$(cat "${REPO}/.taboc/opencode/${WORKER_ID}.label" 2>/dev/null || true)"
+  if [ -n "${LABEL}" ] && command -v launchctl >/dev/null 2>&1; then
+    LAUNCH_PID="$(launchctl list 2>/dev/null | awk -v label="${LABEL}" '$3 == label {print $1; exit}')"
+    if [ -n "${LAUNCH_PID}" ]; then
+      PID="${LAUNCH_PID}"
+    fi
+  fi
   if [ "${STATE}" = "running" ] || [ "${STATE}" = "launched" ]; then
-    if [ -n "${PID}" ] && ! kill -0 "${PID}" 2>/dev/null; then
+    if [ -n "${PID}" ] && [ "${PID}" != "-" ] && ! kill -0 "${PID}" 2>/dev/null; then
+      STATE="lost"
+    elif [ -z "${PID}" ] && [ -z "${LABEL}" ] && [ ! -d "${REPO}/.taboc/opencode/${WORKER_ID}.run" ]; then
       STATE="lost"
     fi
   fi

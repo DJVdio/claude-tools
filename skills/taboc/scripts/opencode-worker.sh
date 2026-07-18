@@ -29,12 +29,47 @@ done
 case "${WORKER_ID}" in *[!A-Za-z0-9._-]*) usage ;; esac
 case "${PROFILE}" in readonly|simple) ;; *) usage ;; esac
 case "${EFFORT}" in low|medium|high|max|xhigh) ;; *) usage ;; esac
-command -v opencode >/dev/null 2>&1 || { echo "opencode not found" >&2; exit 127; }
-
 STATE_DIR="${REPO}/.taboc/opencode"
 mkdir -p "${STATE_DIR}/attempts"
 STATUS_FILE="${STATE_DIR}/${WORKER_ID}.status"
 JOURNAL="${REPO}/.taboc/journal.md"
+PID_FILE="${STATE_DIR}/${WORKER_ID}.pid"
+RUN_LOCK="${TABOC_RUN_LOCK:-${STATE_DIR}/${WORKER_ID}.run}"
+
+cleanup_runtime() {
+  rmdir "${RUN_LOCK}" 2>/dev/null || true
+}
+trap cleanup_runtime EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+printf '%s\n' "$$" > "${PID_FILE}"
+
+resolve_opencode_bin() {
+  local CANDIDATE=""
+  if [ -n "${TABOC_OPENCODE_BIN:-}" ] && [ -x "${TABOC_OPENCODE_BIN}" ]; then
+    printf '%s\n' "${TABOC_OPENCODE_BIN}"
+    return 0
+  fi
+  CANDIDATE="$(command -v opencode 2>/dev/null || true)"
+  if [ -n "${CANDIDATE}" ] && [ -x "${CANDIDATE}" ]; then
+    printf '%s\n' "${CANDIDATE}"
+    return 0
+  fi
+  for CANDIDATE in /opt/homebrew/bin/opencode /usr/local/bin/opencode "${HOME}/.local/bin/opencode"; do
+    if [ -x "${CANDIDATE}" ]; then
+      printf '%s\n' "${CANDIDATE}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+OPENCODE_BIN="$(resolve_opencode_bin || true)"
+if [ -z "${OPENCODE_BIN}" ]; then
+  printf 'blocked|opencode-missing|-|0\n' > "${STATUS_FILE}"
+  printf '[POOL_BLOCKED] %s | opencode unavailable inside worker | keep task queued; do not upgrade\n' "${WORKER_ID}" >> "${JOURNAL}"
+  exit 127
+fi
 
 if [ "${PROFILE}" = "readonly" ]; then
   PERMISSIONS='{"*":"deny","read":"allow","glob":"allow","grep":"allow","lsp":"allow","webfetch":"allow","edit":{"*":"deny",".taboc/journal.md":"allow","**/.taboc/journal.md":"allow"}}'
@@ -43,13 +78,13 @@ else
 fi
 
 available_models() {
-  opencode models opencode 2>/dev/null | awk '/^opencode\/.+-free$/ {print}'
+  "${OPENCODE_BIN}" models opencode 2>/dev/null | awk '/^opencode\/.+-free$/ {print}'
 }
 
 supports_variant() {
   local MODEL="$1"
   local VARIANT="$2"
-  opencode models opencode --verbose 2>/dev/null | awk -v target="${MODEL}" -v variant="\"${VARIANT}\"" '
+  "${OPENCODE_BIN}" models opencode --verbose 2>/dev/null | awk -v target="${MODEL}" -v variant="\"${VARIANT}\"" '
     $0 == target {inside=1; next}
     inside && /^opencode\// {exit}
     inside && index($0, variant ":") {found=1}
@@ -127,7 +162,7 @@ while IFS= read -r MODEL; do
     printf '[MODEL_FALLBACK] %s | %s → %s:%s | infrastructure\n' "${WORKER_ID}" "${PREVIOUS}" "${MODEL}" "${VARIANT:-default}" >> "${JOURNAL}"
   fi
 
-  COMMAND=(opencode run --dir "${REPO}" --model "${MODEL}" --format json --title "taboc-${WORKER_ID}")
+  COMMAND=("${OPENCODE_BIN}" run --dir "${REPO}" --model "${MODEL}" --format json --title "taboc-${WORKER_ID}")
   [ -n "${VARIANT}" ] && COMMAND+=(--variant "${VARIANT}")
   COMMAND+=("$(<"${PROMPT_FILE}")")
 
