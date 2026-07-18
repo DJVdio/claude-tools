@@ -35,6 +35,13 @@
       "prompt": "用 tabb 处理一个实现任务。子 agent 已写入 [DONE] 和 [SEAL]、释放文件锁，但没有发 【RETURN】；接下来连续 3 个回报周期仍然 idle。请说明主 agent 的处置。",
       "expected_output": "任务已经完成，主 agent 继续推进/收口；检查是否已写 [RETURN_REQUESTED]，未写才补发一次并记账。即使连续 3 个周期 idle，也不能 spawn 接替或把任务报成未完成，因为 [DONE]+[SEAL] 已齐全。",
       "files": []
+    },
+    {
+      "id": 5,
+      "name": "parallel-targeted-tests-full-suite-at-seal",
+      "prompt": "用 tabb 并行处理 6 个互不相同的 bug。项目全量测试很慢，要求不要让每个子 agent 都跑全量；但所有任务收口前必须做一次完整集成验证。请给出派单、journal 记录和 git-ops 放行顺序。",
+      "expected_output": "每个 worker 只跑自身改动相关的定向测试/最小检查，并在 [DONE] 中记录命令与结果；git-ops 不常驻，所有任务完成且锁释放后先关闭已完成 worker 释放槽位，再创建 git-ops，让它进入 integration-verify 阶段跑项目真实全量测试并追加本批次新的 [VERIFY] PASS/FAIL；只有本批次新产生的 [VERIFY] PASS 才继续 seal，缺失、复用旧 PASS 或 FAIL 禁止 commit/push；不因额外 spawn 验证 agent 造成并发槽位超限。",
+      "files": []
     }
   ]
 }
