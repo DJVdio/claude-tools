@@ -13,7 +13,7 @@ else
   ok "taboc 不读取其他编排 skill"
 fi
 
-for FILE in skills/taboc/seal.sh skills/taboc/seal-from-journal.sh skills/taboc/scripts/opencode-worker.sh skills/taboc/scripts/launch-opencode.sh skills/taboc/scripts/status-opencode.sh skills/taboc/scripts/register-assignment.sh skills/taboc/scripts/task-panel.sh; do
+for FILE in skills/taboc/seal.sh skills/taboc/seal-from-journal.sh skills/taboc/scripts/opencode-worker.sh skills/taboc/scripts/launch-opencode.sh skills/taboc/scripts/status-opencode.sh skills/taboc/scripts/register-assignment.sh skills/taboc/scripts/task-panel.sh skills/taboc/scripts/cap-effort.sh; do
   if [ -f "${FILE}" ]; then
     bash -n "${FILE}" && ok "${FILE} 语法通过" || bad "${FILE} 语法错误"
   else
@@ -33,6 +33,9 @@ rg -q '/opt/homebrew/bin/opencode' skills/taboc/scripts/launch-opencode.sh && ok
 rg -q '\[POOL_BLOCKED\].*do not upgrade' skills/taboc/scripts/launch-opencode.sh && ok "环境故障禁止批量升级" || bad "缺少执行池阻塞门禁"
 rg -q 'event.get\("type"\) == "error"' skills/taboc/scripts/classify-opencode-log.py && ok "只解析结构化错误事件" || bad "可能把任务文本误判为限额"
 rg -q 'Task \| Agent \| Pool \| Model \| Effort \| State' skills/taboc/scripts/task-panel.py && ok "任务面板显示模型与努力程度" || bad "任务面板缺少调度详情"
+rg -q 'premium child must inherit the main model' skills/taboc/scripts/register-assignment.sh && ok "高性能子 agent 不得超过主模型" || bad "可能出现 Luna 主 agent 派 Sol 子 agent"
+rg -q '免费 OpenCode 不受此.*限制' skills/taboc/SKILL.md && ok "免费模型不受主 agent 上限误伤" || bad "免费 OpenCode 被错误限制"
+rg -q '禁止.*免费.*全开 max' skills/taboc/SKILL.md && ok "免费模型仍按复杂度选档" || bad "免费模型可能无脑使用最高档"
 
 for FILE in skills/taboc/scripts/classify-opencode-log.py skills/taboc/scripts/task-panel.py skills/taboc/scripts/write-launch-plist.py; do
   python3 -c 'import pathlib,sys; compile(pathlib.Path(sys.argv[1]).read_text(), sys.argv[1], "exec")' "${FILE}" \

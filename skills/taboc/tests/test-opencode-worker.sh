@@ -70,10 +70,11 @@ cat > "${REPO}/.taboc/board.md" <<'EOF'
 | risky-fix | premium-one | premium | running |
 EOF
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task risky-fix \
-  --agent premium-one --pool premium --model codex/gpt-5.6-sol --effort high
+  --agent premium-one --pool premium --model luna --effort high \
+  --main-model luna --main-effort max
 PANEL="$(bash "${SKILL_DIR}/scripts/task-panel.sh" --repo "${REPO}")"
 printf '%s\n' "${PANEL}" | grep -Fq '| scout-two | scout-two | opencode | opencode/deepseek-v4-flash-free | medium | done |'
-printf '%s\n' "${PANEL}" | grep -Fq '| risky-fix | premium-one | premium | codex/gpt-5.6-sol | high | running |'
+printf '%s\n' "${PANEL}" | grep -Fq '| risky-fix | premium-one | premium | luna | high | running |'
 
 # A terminal journal record prevents accidental duplicate launches.
 if bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
@@ -83,4 +84,18 @@ if bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
   exit 1
 fi
 
-echo "PASS: fallback, structured errors, one-shot launchd, duplicate guard, model-effort panel"
+# Lower effort cannot justify upgrading the child to a stronger model family.
+if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task model-inversion \
+  --agent premium-sol --pool premium --model sol --effort high \
+  --main-model luna --main-effort max >/dev/null 2>&1; then
+  echo "Luna main unexpectedly spawned a Sol child" >&2
+  exit 1
+fi
+if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task effort-inversion \
+  --agent premium-max --pool premium --model luna --effort max \
+  --main-model luna --main-effort high >/dev/null 2>&1; then
+  echo "high-effort main unexpectedly spawned a max-effort premium child" >&2
+  exit 1
+fi
+
+echo "PASS: fallback, structured errors, one-shot launchd, duplicate guard, premium parent ceiling, model-effort panel"
