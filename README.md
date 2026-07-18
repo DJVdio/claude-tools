@@ -179,9 +179,10 @@ ln -s "$PWD/test-runner"        ~/.claude/skills/test-runner
 
 ```bash
 bash scripts/check-skill-sync.sh
+bash scripts/check-tabb-contract.sh  # 改 tabb 时额外跑：体积预算 + 核心能力回归
 ```
 
-它校验 ta / tabb 的「各自独立可安装」契约：两份 `seal.sh` 逐字一致、各自带齐脚本、**不引用对方 skill 的文件路径**、没有「沿用 ta，不赘述」式的悬空引用、shell 语法与变量边界地雷。
+`check-skill-sync.sh` 校验 ta / tabb 的「各自独立可安装」契约：两份 `seal.sh` 逐字一致、各自带齐脚本、**不引用对方 skill 的文件路径**、没有「沿用 ta，不赘述」式的悬空引用、shell 语法与变量边界地雷。`check-tabb-contract.sh` 限制 tabb prompt 体积，并守住原子锁、交接、决策上抛、idle 防重派、分层测试和收口门禁。
 
 为什么要这个校验：跑 `/tabb` 时**只有 `tabb/SKILL.md` 进上下文**，ta 的正文不会出现。所以跨 skill 的「沿用 ta，不赘述」对人是有效引用，**对 agent 是悬空的**——它会直接当那段内容不存在，然后自己现编一套。同理，任何指向 `~/.claude/skills/<对方>/` 的路径在单装场景下都是死链。这两类问题都实战踩过，所以固化成了可执行检查。
 
