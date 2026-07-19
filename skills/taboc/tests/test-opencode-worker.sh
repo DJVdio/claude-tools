@@ -20,6 +20,23 @@ touch "${REPO}/.taboc/journal.md"
 printf '%s\n' 'Return done.' > "${TEST_ROOT}/prompt.txt"
 export PATH="${MOCK_BIN}:${PATH}"
 export TABOC_OPENCODE_BIN="${MOCK_BIN}/opencode"
+
+# Prompt generator carries the complete profile-specific protocol without loading it into SKILL.md.
+python3 "${SKILL_DIR}/scripts/write-worker-prompt.py" \
+  --output "${TEST_ROOT}/readonly.prompt" --repo "${REPO}" --branch main \
+  --id prompt-readonly --profile readonly --task 'inspect auth' --validation 'rg auth'
+grep -Fq '[HANDOFF] prompt-readonly →' "${TEST_ROOT}/readonly.prompt"
+if grep -Eq '^  \[SEAL\]' "${TEST_ROOT}/readonly.prompt"; then
+  echo "readonly prompt unexpectedly contains a SEAL output record" >&2
+  exit 1
+fi
+python3 "${SKILL_DIR}/scripts/write-worker-prompt.py" \
+  --output "${TEST_ROOT}/simple.prompt" --repo "${REPO}" --branch main \
+  --id prompt-simple --profile simple --task 'fix typo' --validation 'npm test -- typo'
+grep -Fq 'mkdir "${L}"' "${TEST_ROOT}/simple.prompt"
+grep -Fq '[DONE] prompt-simple |' "${TEST_ROOT}/simple.prompt"
+grep -Fq "[SEAL] ${REPO} |" "${TEST_ROOT}/simple.prompt"
+
 touch "${REPO}/.taboc/mock-deepseek-fail"
 
 bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
@@ -158,4 +175,4 @@ if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task ef
   exit 1
 fi
 
-echo "PASS: timeout fallback, concurrent startup, env forwarding, terminal recovery, premium ceiling, live task panel"
+echo "PASS: prompt generation, timeout fallback, concurrent startup, env forwarding, terminal recovery, premium ceiling, live task panel"
