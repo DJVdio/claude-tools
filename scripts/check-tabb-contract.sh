@@ -29,6 +29,10 @@ need '不得复用旧 PASS' "分层测试：本批次 VERIFY 门禁"
 need 'ScheduleWakeup' "持续回报：自驱轮询"
 need 'TaskOutput' "进度：读取真实里程碑"
 need '出现 malformed 立即停' "派单：malformed 防失准"
+need '子 agent 不得强于主 agent' "模型：子 agent 不得强于主 agent"
+need '同系列弱一档优先' "省额度：只读与简单任务主动降档"
+need 'task-panel.sh --repo' "进度：任务面板展示调度"
+need 'Model / Effort' "面板：显示模型与思考程度"
 
 echo "══ 3. 收口与自包含契约 ══"
 need 'seal-from-journal.sh --dry-run' "收口预检脚本"
@@ -55,6 +59,16 @@ assert "mkdir" in data["evals"][0]["expected_output"]
 assert "读→锁→回读校验" not in data["evals"][0]["expected_output"]
 PY
 then ok "6 条 eval 完整，原子锁基准已更新"; else bad "eval 缺失、JSON 错误或仍含旧锁协议"; fi
+
+echo "══ 5. 模型上限与任务面板 ══"
+for FILE in skills/tabb/scripts/register-assignment.sh skills/tabb/scripts/task-panel.sh; do
+  bash -n "${FILE}" && ok "${FILE} 语法通过" || bad "${FILE} 语法错误"
+done
+for FILE in skills/tabb/scripts/check-model-ceiling.py skills/tabb/scripts/task-panel.py; do
+  python3 -c 'import pathlib,sys; compile(pathlib.Path(sys.argv[1]).read_text(), sys.argv[1], "exec")' "${FILE}" \
+    && ok "${FILE} 语法通过" || bad "${FILE} 语法错误"
+done
+bash skills/tabb/tests/test-routing-panel.sh || FAIL=1
 
 echo
 [ "${FAIL}" = 0 ] && echo "✅ tabb 体积与能力契约通过" || echo "❌ tabb 回归失败"

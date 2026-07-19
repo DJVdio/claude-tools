@@ -37,6 +37,18 @@ if [ -f "skills/tabb/seal-from-journal.sh" ]; then
 else
   bad "skills/tabb/seal-from-journal.sh 缺失——git-ops 会退回用眼睛抠白名单（收口卡 6 分钟）"
 fi
+for f in skills/tabb/scripts/register-assignment.sh skills/tabb/scripts/task-panel.sh; do
+  if [ -f "${f}" ]; then
+    bash -n "${f}" 2>/dev/null && ok "${f} 存在且语法通过" || bad "${f} 语法错误"
+  else
+    bad "缺少 ${f}——tabb 模型登记或任务面板不可用"
+  fi
+done
+if diff -q skills/tabb/scripts/check-model-ceiling.py skills/taboc/scripts/check-model-ceiling.py >/dev/null 2>&1; then
+  ok "tabb/taboc 模型上限门禁一致且各自独立携带"
+else
+  bad "tabb/taboc 的同系列模型上限门禁已漂移"
+fi
 
 echo "══ 3. 不得引用对方 skill 的文件路径（跨 skill 依赖 = 单装即坏）══"
 if grep -n 'skills/tabb/' skills/ta/SKILL.md 2>/dev/null; then

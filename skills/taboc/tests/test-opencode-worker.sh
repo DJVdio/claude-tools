@@ -168,16 +168,21 @@ cat > "${REPO}/.taboc/board.md" <<'EOF'
 |---|---|---|---|
 | scout-two | scout-two | opencode | claimed |
 | risky-fix | premium-one | premium | running |
+| cheap-audit | premium-terra | premium | running |
 | stale-worker | stale-worker | opencode | running |
 EOF
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task risky-fix \
   --agent premium-one --pool premium --model luna --effort high \
+  --main-model luna --main-effort max
+bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task cheap-audit \
+  --agent premium-terra --pool premium --model terra --effort medium \
   --main-model luna --main-effort max
 printf 'running|opencode/deepseek-v4-flash-free|high|1\n' > "${REPO}/.taboc/opencode/stale-worker.status"
 printf '99999999\n' > "${REPO}/.taboc/opencode/stale-worker.pid"
 PANEL="$(bash "${SKILL_DIR}/scripts/task-panel.sh" --repo "${REPO}")"
 printf '%s\n' "${PANEL}" | grep -Fq '| scout-two | scout-two | opencode | opencode/deepseek-v4-flash-free | medium | done |'
 printf '%s\n' "${PANEL}" | grep -Fq '| risky-fix | premium-one | premium | luna | high | running |'
+printf '%s\n' "${PANEL}" | grep -Fq '| cheap-audit | premium-terra | premium | terra | medium | running |'
 printf '%s\n' "${PANEL}" | grep -Fq '| stale-worker | stale-worker | opencode | opencode/deepseek-v4-flash-free | high | lost |'
 
 # A terminal journal record prevents accidental duplicate launches.
@@ -201,5 +206,11 @@ if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task ef
   echo "high-effort main unexpectedly spawned a max-effort premium child" >&2
   exit 1
 fi
+if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task unknown-inversion \
+  --agent premium-unknown --pool premium --model vendor-fast --effort low \
+  --main-model vendor-pro --main-effort high >/dev/null 2>&1; then
+  echo "unprovable cross-series premium downgrade unexpectedly accepted" >&2
+  exit 1
+fi
 
-echo "PASS: adaptive idle/hard timeout, fallback, concurrent startup, env forwarding, terminal recovery, premium ceiling, live task panel"
+echo "PASS: adaptive timeout, fallback, concurrent startup, weaker premium tier, premium ceiling, live task panel"

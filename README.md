@@ -124,6 +124,8 @@ ln -s "$PWD/skills/large-file-write" ~/.claude/skills/large-file-write
 
 **选型第一判据是文件冲突协调的频度，不是任务数量。** 黑板不是免费的（轮询延迟、需清道夫兜死锁），只有"主 agent 成了文件协调瓶颈"这个痛点真实且高频时才值得上 tabb，否则 ta 更省心。
 
+`tabb` 会为每项任务登记并展示实际模型与 effort；子 agent 不得强于主 agent，只读和简单任务优先使用同系列弱档。已知型号可安全降档，未知或跨系列无法证明强弱时保守继承主模型。
+
 两者都把 subagent 当执行体（侦察 / 实现 / 验证 / git 收口全部派出去），主 agent 不自己写代码。含角色编制、派单 prompt 要素、里程碑进度条、决策上抛、定期回报循环、异常处理手册。
 
 #### git 收口走 `seal.sh`，不逐条发命令
@@ -152,7 +154,7 @@ ln -s "$PWD/skills/tabb" ~/.claude/skills/tabb
 
 `taboc` 是一套完全独立的编排 skill：用自己的 `.taboc/` 黑板和锁，把只读、调研、机械性及低风险实现默认并发派给本机 OpenCode 免费模型；认证、支付、生产数据、架构语义等高风险任务留给 Codex/Claude。DeepSeek V4 会按任务使用 `medium/high/max`，额度或服务失败时自动轮换其他实时可见的免费模型。
 
-OpenCode worker 不占 Codex/Claude subagent 槽，可同时使用两边的并发能力。消耗高级额度的 Codex/Claude 子 agent 必须继承主模型且不得提高 effort；免费 OpenCode 可以强于主 agent，但仍按任务复杂度使用 `medium/high/max`，避免浪费限额和时间。`taboc` 使用一次性 LaunchAgent，自带权限隔离、活动感知超时与总时长上限、并发冷启动保护、终态恢复、模型/努力程度任务面板、状态聚合与收口脚本，不读取 `ta` 或 `tabb` 的文件。
+OpenCode worker 不占 Codex/Claude subagent 槽，可同时使用两边的并发能力。消耗高级额度的 Codex/Claude 子 agent 可继承主模型或使用同系列已知弱档，但模型和 effort 都不得超过主 agent；免费 OpenCode 可以强于主 agent，但仍按任务复杂度使用 `medium/high/max`，避免浪费限额和时间。`taboc` 使用一次性 LaunchAgent，自带权限隔离、活动感知超时与总时长上限、并发冷启动保护、终态恢复、模型/努力程度任务面板、状态聚合与收口脚本，不读取 `ta` 或 `tabb` 的文件。
 
 ```bash
 cd /path/to/claude-tools
