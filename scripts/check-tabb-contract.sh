@@ -33,6 +33,8 @@ need '子 agent 不得强于主 agent' "模型：子 agent 不得强于主 agent
 need '同系列弱一档优先' "省额度：只读与简单任务主动降档"
 need 'task-panel.sh --repo' "进度：任务面板展示调度"
 need 'Model / Effort' "面板：显示模型与思考程度"
+need '同 effort 不传 `reasoning_effort`/`thinking`' "派发：同 effort 强制继承"
+need '不得手写 assignments 绕过脚本' "门禁：禁止伪造登记"
 
 echo "══ 3. 收口与自包含契约 ══"
 need 'seal-from-journal.sh --dry-run' "收口预检脚本"

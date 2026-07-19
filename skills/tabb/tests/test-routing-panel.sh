@@ -18,7 +18,14 @@ bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${TEST_ROOT}" \
   --model gpt-5.6-terra --effort medium --main-model gpt-5.6-luna --main-effort max
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${TEST_ROOT}" \
   --task 修复登录 --agent impl-auth --role implementation \
-  --model gpt-5.6-luna --effort high --main-model gpt-5.6-luna --main-effort max
+  --model inherit-main --effort inherit-main
+
+if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${TEST_ROOT}" \
+  --task 截图复现 --agent bad-same-high --role implementation \
+  --model gpt-5.6-sol --effort high --main-model gpt-5.6-sol --main-effort high >/dev/null 2>&1; then
+  echo "explicit same-model high unexpectedly accepted via a falsely reported main high" >&2
+  exit 1
+fi
 
 if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${TEST_ROOT}" \
   --task 越级模型 --agent bad-model --role readonly \
@@ -41,7 +48,7 @@ fi
 
 PANEL="$(bash "${SKILL_DIR}/scripts/task-panel.sh" --repo "${TEST_ROOT}")"
 printf '%s\n' "${PANEL}" | grep -Fq '| 查调用链 | scout-auth | readonly | gpt-5.6-terra | medium | doing |'
-printf '%s\n' "${PANEL}" | grep -Fq '| 修复登录 | impl-auth | implementation | gpt-5.6-luna | high | open |'
+printf '%s\n' "${PANEL}" | grep -Fq '| 修复登录 | impl-auth | implementation | inherit-main | inherit-main | open |'
 printf '%s\n' "${PANEL}" | grep -Fq '| 等待产品确认 | — | not-dispatched | not-dispatched | not-dispatched | blocked |'
 
-echo "PASS: weaker model/effort accepted, stronger or unprovable model rejected, panel exposes routing"
+echo "PASS: inheritance and strict downgrades accepted; equal, stronger, or unprovable overrides rejected"

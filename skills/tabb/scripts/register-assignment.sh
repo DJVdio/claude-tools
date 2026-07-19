@@ -25,7 +25,7 @@ while [ "${#}" -gt 0 ]; do
 done
 
 [ -d "${REPO}" ] && [ -n "${TASK}" ] && [ -n "${AGENT}" ] && [ -n "${ROLE}" ] \
-  && [ -n "${MODEL}" ] && [ -n "${EFFORT}" ] && [ -n "${MAIN_MODEL}" ] && [ -n "${MAIN_EFFORT}" ] \
+  && [ -n "${MODEL}" ] && [ -n "${EFFORT}" ] \
   || { echo "missing assignment field" >&2; exit 2; }
 for VALUE in "${TASK}" "${AGENT}" "${ROLE}" "${MODEL}" "${EFFORT}"; do
   case "${VALUE}" in *$'\t'*|*$'\n'*) echo "assignment fields cannot contain tabs or newlines" >&2; exit 2 ;; esac
@@ -33,7 +33,7 @@ done
 
 python3 "${SCRIPT_DIR}/check-model-ceiling.py" \
   --model "${MODEL}" --effort "${EFFORT}" \
-  --main-model "${MAIN_MODEL}" --main-effort "${MAIN_EFFORT}"
+  --main-model "${MAIN_MODEL}" --main-effort "${MAIN_EFFORT}" --strict-overrides
 mkdir -p "${REPO}/.tabb"
 printf '%s\t%s\t%s\t%s\t%s\n' "${TASK}" "${AGENT}" "${ROLE}" "${MODEL}" "${EFFORT}" \
   >> "${REPO}/.tabb/assignments.tsv"

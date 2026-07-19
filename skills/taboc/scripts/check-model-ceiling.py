@@ -3,7 +3,7 @@ import argparse
 import re
 
 
-EFFORT_RANK = {"low": 1, "medium": 2, "high": 3, "max": 4, "xhigh": 5}
+EFFORT_RANK = {"low": 1, "medium": 2, "high": 3, "xhigh": 4, "max": 5, "ultra": 6}
 MODEL_TIERS = {
     "codex": {"terra": 1, "luna": 2, "sol": 3},
     "claude": {"haiku": 1, "sonnet": 2, "opus": 3},
@@ -28,20 +28,31 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True)
     parser.add_argument("--effort", required=True)
-    parser.add_argument("--main-model", required=True)
-    parser.add_argument("--main-effort", required=True)
+    parser.add_argument("--main-model", default="")
+    parser.add_argument("--main-effort", default="")
+    parser.add_argument("--strict-overrides", action="store_true")
     options = parser.parse_args()
 
-    child_effort = EFFORT_RANK.get(normalize(options.effort))
-    main_effort = EFFORT_RANK.get(normalize(options.main_effort))
-    if child_effort is None or main_effort is None:
-        parser.error("effort must be low, medium, high, max, or xhigh")
-    if child_effort > main_effort:
-        parser.error(f"child effort exceeds main effort: {options.effort} > {options.main_effort}")
+    child_effort_name = normalize(options.effort)
+    if child_effort_name != "inherit-main":
+        child_effort = EFFORT_RANK.get(child_effort_name)
+        main_effort = EFFORT_RANK.get(normalize(options.main_effort))
+        if child_effort is None or main_effort is None:
+            parser.error("explicit effort requires a trusted main effort; use inherit-main when unknown")
+        if child_effort > main_effort:
+            parser.error(f"child effort exceeds main effort: {options.effort} > {options.main_effort}")
+        if options.strict_overrides and child_effort == main_effort:
+            parser.error("explicit effort must be a strict downgrade; use inherit-main for equal effort")
 
     child_model = normalize(options.model)
+    if child_model == "inherit-main":
+        return 0
     main_model = normalize(options.main_model)
+    if not main_model:
+        parser.error("explicit model requires a trusted main model; use inherit-main when unknown")
     if child_model == main_model:
+        if options.strict_overrides:
+            parser.error("explicit model must be a strict downgrade; use inherit-main for the main model")
         return 0
     child = classify(child_model)
     main = classify(main_model)
