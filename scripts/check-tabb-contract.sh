@@ -29,11 +29,15 @@ need '不得复用旧 PASS' "分层测试：本批次 VERIFY 门禁"
 need 'ScheduleWakeup' "持续回报：自驱轮询"
 need 'TaskOutput' "进度：读取真实里程碑"
 need '出现 malformed 立即停' "派单：malformed 防失准"
-need '子 agent 不得强于主 agent' "模型：子 agent 不得强于主 agent"
-need '同系列弱一档优先' "省额度：只读与简单任务主动降档"
+need '路由只认固定五档' "模型：只认固定五档"
+need 'gpt-5.6-luna / low' "只读：Luna-low"
+need 'gpt-5.6-luna / medium' "简单：Luna-medium"
+need 'gpt-5.6-luna / max' "短复杂：Luna-max"
+need 'gpt-5.6-sol / medium' "长复杂：Sol-medium"
+need 'gpt-5.6-sol / high' "非常复杂：Sol-high"
+need 'route-task.py --class' "派发：强制运行固定路由脚本"
 need 'task-panel.sh --repo' "进度：任务面板展示调度"
 need 'Model / Effort' "面板：显示模型与思考程度"
-need '同 effort 不传 `reasoning_effort`/`thinking`' "派发：同 effort 强制继承"
 need '不得手写 assignments 绕过脚本' "门禁：禁止伪造登记"
 
 echo "══ 3. 收口与自包含契约 ══"
@@ -62,11 +66,11 @@ assert "读→锁→回读校验" not in data["evals"][0]["expected_output"]
 PY
 then ok "6 条 eval 完整，原子锁基准已更新"; else bad "eval 缺失、JSON 错误或仍含旧锁协议"; fi
 
-echo "══ 5. 模型上限与任务面板 ══"
+echo "══ 5. 固定路由与任务面板 ══"
 for FILE in skills/tabb/scripts/register-assignment.sh skills/tabb/scripts/task-panel.sh; do
   bash -n "${FILE}" && ok "${FILE} 语法通过" || bad "${FILE} 语法错误"
 done
-for FILE in skills/tabb/scripts/check-model-ceiling.py skills/tabb/scripts/task-panel.py; do
+for FILE in skills/tabb/scripts/route-task.py skills/tabb/scripts/task-panel.py; do
   python3 -c 'import pathlib,sys; compile(pathlib.Path(sys.argv[1]).read_text(), sys.argv[1], "exec")' "${FILE}" \
     && ok "${FILE} 语法通过" || bad "${FILE} 语法错误"
 done

@@ -80,7 +80,7 @@ QUOTA_CODE=0
 QUOTA_INFO="$(check_quota)" || QUOTA_CODE=$?
 if [ "${QUOTA_CODE}" -eq 75 ]; then
   printf 'blocked|quota|-|0\n' > "${STATUS_FILE}"
-  printf '[POOL_QUOTA] %s | %s | shared OpenCode free quota; keep queued\n' "${WORKER_ID}" "${QUOTA_INFO}" >> "${JOURNAL}"
+  printf '[POOL_QUOTA] %s | %s | reroute readonly task to gpt-5.6-luna/low\n' "${WORKER_ID}" "${QUOTA_INFO}" >> "${JOURNAL}"
   echo "OpenCode free pool ${QUOTA_INFO}" >&2
   exit 75
 fi

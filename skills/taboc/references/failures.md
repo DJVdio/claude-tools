@@ -6,7 +6,7 @@
 
 | 情况 | 处置 |
 |---|---|
-| DeepSeek 限额 | 写全局 quota state 与 `[POOL_QUOTA]`，记录解除时间；到期前所有项目禁用 OpenCode，不试其他免费模型 |
+| DeepSeek 限额 | 写全局 quota state 与 `[POOL_QUOTA]`，记录解除时间；对原只读任务重跑固定路由，改派 Luna-low；不试其他免费模型 |
 | DeepSeek 服务错误、静默超时或总时长超限 | 状态 `exhausted`；不试其他免费模型，也不因执行池故障自动升级任务 |
 | 实时模型目录为空或失败 | 仍只真实调用内置 DeepSeek 名称一次；不得把目录故障当额度耗尽 |
 | `opencode`、launchctl、launchd 故障 | 写 `[POOL_BLOCKED]`，保留队列并修环境或报告用户；禁止升级这批任务 |

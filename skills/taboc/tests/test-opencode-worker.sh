@@ -22,6 +22,16 @@ export PATH="${MOCK_BIN}:${PATH}"
 export TABOC_OPENCODE_BIN="${MOCK_BIN}/opencode"
 export TABOC_QUOTA_STATE="${TEST_ROOT}/global-opencode-quota.json"
 
+route() {
+  python3 "${SKILL_DIR}/scripts/route-task.py" --class "${1}" --quota-state "${TABOC_QUOTA_STATE}"
+}
+
+[ "$(route readonly)" = $'opencode\topencode/deepseek-v4-flash-free\tmedium' ]
+[ "$(route simple)" = $'premium\tgpt-5.6-luna\tmedium' ]
+[ "$(route complex-short)" = $'premium\tgpt-5.6-luna\tmax' ]
+[ "$(route complex-long)" = $'premium\tgpt-5.6-sol\tmedium' ]
+[ "$(route very-complex)" = $'premium\tgpt-5.6-sol\thigh' ]
+
 # Prompt generator carries the complete profile-specific protocol without loading it into SKILL.md.
 python3 "${SKILL_DIR}/scripts/write-worker-prompt.py" \
   --output "${TEST_ROOT}/readonly.prompt" --repo "${REPO}" --branch main \
@@ -57,6 +67,7 @@ grep -Fq '[POOL_QUOTA] scout-one' "${REPO}/.taboc/journal.md"
 grep -Fq 'blocked|opencode/deepseek-v4-flash-free|max|1' "${REPO}/.taboc/opencode/scout-one.status"
 grep -Fq '"source": "provider"' "${TABOC_QUOTA_STATE}"
 grep -Fq '"until"' "${TABOC_QUOTA_STATE}"
+[ "$(route readonly)" = $'premium\tgpt-5.6-luna\tlow' ]
 QUOTA_PANEL="$(bash "${SKILL_DIR}/scripts/task-panel.sh" --repo "${REPO}")"
 printf '%s\n' "${QUOTA_PANEL}" | grep -Fq 'OpenCode Pool | blocked|until='
 set +e
@@ -193,17 +204,15 @@ cat > "${REPO}/.taboc/board.md" <<'EOF'
 | stale-worker | stale-worker | opencode | running |
 EOF
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task risky-fix \
-  --agent premium-one --pool premium --model inherit-main --effort high \
-  --main-effort max
+  --agent premium-one --pool premium --model gpt-5.6-sol --effort high
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task cheap-audit \
-  --agent premium-terra --pool premium --model terra --effort medium \
-  --main-model luna --main-effort max
+  --agent premium-luna --pool premium --model gpt-5.6-luna --effort max
 printf 'running|opencode/deepseek-v4-flash-free|high|1\n' > "${REPO}/.taboc/opencode/stale-worker.status"
 printf '99999999\n' > "${REPO}/.taboc/opencode/stale-worker.pid"
 PANEL="$(bash "${SKILL_DIR}/scripts/task-panel.sh" --repo "${REPO}")"
 printf '%s\n' "${PANEL}" | grep -Fq '| scout-two | scout-two | opencode | opencode/deepseek-v4-flash-free | medium | done |'
-printf '%s\n' "${PANEL}" | grep -Fq '| risky-fix | premium-one | premium | inherit-main | high | running |'
-printf '%s\n' "${PANEL}" | grep -Fq '| cheap-audit | premium-terra | premium | terra | medium | running |'
+printf '%s\n' "${PANEL}" | grep -Fq '| risky-fix | premium-one | premium | gpt-5.6-sol | high | running |'
+printf '%s\n' "${PANEL}" | grep -Fq '| cheap-audit | premium-luna | premium | gpt-5.6-luna | max | running |'
 printf '%s\n' "${PANEL}" | grep -Fq '| stale-worker | stale-worker | opencode | opencode/deepseek-v4-flash-free | high | lost |'
 
 # A terminal journal record prevents accidental duplicate launches.
@@ -214,30 +223,4 @@ if bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
   exit 1
 fi
 
-# Lower effort cannot justify upgrading the child to a stronger model family.
-if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task screenshot-regression \
-  --agent premium-false-high --pool premium --model sol --effort high \
-  --main-model sol --main-effort high >/dev/null 2>&1; then
-  echo "explicit Sol-high unexpectedly accepted via a falsely reported Sol-high main" >&2
-  exit 1
-fi
-if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task model-inversion \
-  --agent premium-sol --pool premium --model sol --effort high \
-  --main-model luna --main-effort max >/dev/null 2>&1; then
-  echo "Luna main unexpectedly spawned a Sol child" >&2
-  exit 1
-fi
-if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task effort-inversion \
-  --agent premium-max --pool premium --model luna --effort max \
-  --main-model luna --main-effort high >/dev/null 2>&1; then
-  echo "high-effort main unexpectedly spawned a max-effort premium child" >&2
-  exit 1
-fi
-if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task unknown-inversion \
-  --agent premium-unknown --pool premium --model vendor-fast --effort low \
-  --main-model vendor-pro --main-effort high >/dev/null 2>&1; then
-  echo "unprovable cross-series premium downgrade unexpectedly accepted" >&2
-  exit 1
-fi
-
-echo "PASS: shared quota circuit breaker, no free-model fallback, concurrency, premium inheritance, panel"
+echo "PASS: fixed five-class routing, quota fallback, no free-model fallback, concurrency, panel"

@@ -1,4 +1,4 @@
 interface:
   display_name: "Taboc"
-  short_description: "用免费 OpenCode worker 扩展并发并节省高级模型额度"
-  default_prompt: "Use $taboc to route this work across OpenCode and premium agents by risk."
+  short_description: "按固定五档路由 OpenCode、Luna 与 Sol 并行任务"
+  default_prompt: "Use $taboc to classify this work into the fixed five-tier model route and execute it in parallel."

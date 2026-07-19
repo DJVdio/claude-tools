@@ -48,7 +48,7 @@ QUOTA_CODE=0
 QUOTA_INFO="$(check_quota)" || QUOTA_CODE=$?
 if [ "${QUOTA_CODE}" -eq 75 ]; then
   printf 'blocked|quota|-|0\n' > "${STATUS_FILE}"
-  printf '[POOL_QUOTA] %s | %s | shared OpenCode free quota; keep queued\n' "${WORKER_ID}" "${QUOTA_INFO}" >> "${JOURNAL}"
+  printf '[POOL_QUOTA] %s | %s | reroute readonly task to gpt-5.6-luna/low\n' "${WORKER_ID}" "${QUOTA_INFO}" >> "${JOURNAL}"
   exit 75
 fi
 
@@ -225,7 +225,7 @@ while IFS= read -r MODEL; do
   QUOTA_INFO="$(check_quota)" || QUOTA_CODE=$?
   if [ "${QUOTA_CODE}" -eq 75 ]; then
     printf 'blocked|quota|-|%s\n' "${ATTEMPT}" > "${STATUS_FILE}"
-    printf '[POOL_QUOTA] %s | %s | shared OpenCode free quota; keep queued\n' "${WORKER_ID}" "${QUOTA_INFO}" >> "${JOURNAL}"
+    printf '[POOL_QUOTA] %s | %s | reroute readonly task to gpt-5.6-luna/low\n' "${WORKER_ID}" "${QUOTA_INFO}" >> "${JOURNAL}"
     exit 75
   fi
   ATTEMPT=$((ATTEMPT + 1))
@@ -271,7 +271,7 @@ while IFS= read -r MODEL; do
     QUOTA_INFO="$(python3 "${SCRIPT_DIR}/quota-state.py" record --state "${QUOTA_STATE}" \
       --log "${ATTEMPT_LOG}" --model "${MODEL}" --fallback-seconds "${QUOTA_FALLBACK_SECONDS}")"
     printf 'blocked|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${ATTEMPT}" > "${STATUS_FILE}"
-    printf '[POOL_QUOTA] %s | %s | %s | shared OpenCode free quota; no model fallback\n' \
+    printf '[POOL_QUOTA] %s | %s | %s | reroute to gpt-5.6-luna/low; no free-model fallback\n' \
       "${WORKER_ID}" "${MODEL}" "${QUOTA_INFO}" >> "${JOURNAL}"
     exit 75
   fi

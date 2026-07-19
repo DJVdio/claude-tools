@@ -44,10 +44,15 @@ for f in skills/tabb/scripts/register-assignment.sh skills/tabb/scripts/task-pan
     bad "缺少 ${f}——tabb 模型登记或任务面板不可用"
   fi
 done
-if diff -q skills/tabb/scripts/check-model-ceiling.py skills/taboc/scripts/check-model-ceiling.py >/dev/null 2>&1; then
-  ok "tabb/taboc 模型上限门禁一致且各自独立携带"
+if [ -f skills/tabb/scripts/route-task.py ] && [ -f skills/taboc/scripts/route-task.py ]; then
+  ok "tabb/taboc 各自携带固定路由脚本"
 else
-  bad "tabb/taboc 的同系列模型上限门禁已漂移"
+  bad "tabb/taboc 缺少独立固定路由脚本"
+fi
+if [ -e skills/tabb/scripts/check-model-ceiling.py ] || [ -e skills/taboc/scripts/check-model-ceiling.py ]; then
+  bad "已废弃的主模型上限门禁仍存在"
+else
+  ok "已移除主模型上限门禁"
 fi
 
 echo "══ 3. 不得引用对方 skill 的文件路径（跨 skill 依赖 = 单装即坏）══"
