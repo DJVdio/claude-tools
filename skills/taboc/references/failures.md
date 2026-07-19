@@ -6,7 +6,7 @@
 
 | 情况 | 处置 |
 |---|---|
-| DeepSeek 限额、服务错误、单次超时 | worker 自动切换下一免费模型并记 `[MODEL_FALLBACK]`；不要升级任务难度 |
+| DeepSeek 限额、服务错误、静默超时或总时长超限 | worker 自动切换下一免费模型并记 `[MODEL_FALLBACK]`；不要升级任务难度 |
 | 实时模型目录为空或失败 | worker 使用内置已知免费候选继续真实调用；不得把 `tried=0` 当模型耗尽 |
 | 所有候选真实调用失败 | 状态 `exhausted`；逐任务按风险决定接替，禁止整批升级 |
 | `opencode`、launchctl、launchd 故障 | 写 `[POOL_BLOCKED]`，保留队列并修环境或报告用户；禁止升级这批任务 |
@@ -14,7 +14,7 @@
 | 最终 JSON 含严格匹配 worker id 的终态 | worker 自动补写 journal；不匹配的自由文本不采纳 |
 | 任务正文出现 quota、capacity、402 | 不算错误；只认顶层 `type=error` 或 CLI 非零退出 |
 
-每个模型默认 300 秒超时。需要调整时设置 `TABOC_ATTEMPT_TIMEOUT`；`TABOC_MODELS` 指定逗号分隔候选；`TABOC_MAX_ATTEMPTS` 限制次数；`TABOC_STARTUP_HOLD` 调整冷启动错峰。launcher 会透传这些变量。除非用户显式把付费模型写入 `TABOC_MODELS`，worker 不自行花钱。
+超时使用两层门禁：日志持续增长会重置 idle timeout，适合长时间编码和测试；hard timeout 限制总耗时，避免持续噪声无限运行。默认 idle timeout 按任务分级：`readonly` 的 low/medium/high/max 为 180/300/450/600 秒，`simple` 为 300/450/600/900 秒；hard timeout 默认为 idle 的 3 倍。`TABOC_ATTEMPT_TIMEOUT` 覆盖 idle，`TABOC_ATTEMPT_HARD_TIMEOUT` 覆盖 hard；`TABOC_MODELS` 指定候选，`TABOC_MAX_ATTEMPTS` 限制次数，`TABOC_STARTUP_HOLD` 调整冷启动错峰。launcher 会透传这些变量。除非用户显式把付费模型写入 `TABOC_MODELS`，worker 不自行花钱。
 
 ## 并发、状态与锁
 

@@ -57,16 +57,41 @@ TABOC_MOCK_MODELS_EMPTY=1 bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
   --prompt-file "${TEST_ROOT}/prompt.txt"
 grep -Fq 'done|opencode/deepseek-v4-flash-free|default|1' "${REPO}/.taboc/opencode/scout-discovery.status"
 
-# A hung model is terminated and the next approved free model receives the task.
+# A silent hung model hits the idle timeout and the next approved free model receives the task.
 touch "${REPO}/.taboc/mock-deepseek-hang"
-TABOC_ATTEMPT_TIMEOUT=1 TABOC_STARTUP_HOLD=0 \
+TABOC_ATTEMPT_TIMEOUT=1 TABOC_ATTEMPT_HARD_TIMEOUT=5 TABOC_STARTUP_HOLD=0 \
 TABOC_MODELS='opencode/deepseek-v4-flash-free,opencode/nemotron-3-ultra-free' \
   bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
     --repo "${REPO}" --id scout-timeout --profile readonly --effort high \
     --prompt-file "${TEST_ROOT}/prompt.txt"
 rm "${REPO}/.taboc/mock-deepseek-hang"
 grep -Fq 'done|opencode/nemotron-3-ultra-free|high|2' "${REPO}/.taboc/opencode/scout-timeout.status"
-grep -Fq 'TabocAttemptTimeout' "${REPO}/.taboc/opencode/attempts/scout-timeout.1.log"
+grep -Fq 'TabocAttemptIdleTimeout' "${REPO}/.taboc/opencode/attempts/scout-timeout.1.log"
+
+# Productive output resets the idle timer, so an active task can exceed the old wall-clock limit.
+touch "${REPO}/.taboc/mock-active-long"
+TABOC_ATTEMPT_TIMEOUT=1 TABOC_ATTEMPT_HARD_TIMEOUT=5 TABOC_STARTUP_HOLD=0 \
+TABOC_MODELS='opencode/deepseek-v4-flash-free' TABOC_MAX_ATTEMPTS=1 \
+  bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
+    --repo "${REPO}" --id scout-active --profile readonly --effort high \
+    --prompt-file "${TEST_ROOT}/prompt.txt"
+rm "${REPO}/.taboc/mock-active-long"
+grep -Fq 'done|opencode/deepseek-v4-flash-free|high|1' "${REPO}/.taboc/opencode/scout-active.status"
+if grep -Fq 'TabocAttemptIdleTimeout' "${REPO}/.taboc/opencode/attempts/scout-active.1.log"; then
+  echo "active worker incorrectly hit idle timeout" >&2
+  exit 1
+fi
+
+# Continuous chatter cannot bypass the hard wall-clock limit.
+touch "${REPO}/.taboc/mock-active-long"
+TABOC_ATTEMPT_TIMEOUT=5 TABOC_ATTEMPT_HARD_TIMEOUT=1 TABOC_STARTUP_HOLD=0 \
+TABOC_MODELS='opencode/deepseek-v4-flash-free,opencode/nemotron-3-ultra-free' \
+  bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
+    --repo "${REPO}" --id scout-hard-timeout --profile readonly --effort high \
+    --prompt-file "${TEST_ROOT}/prompt.txt"
+rm "${REPO}/.taboc/mock-active-long"
+grep -Fq 'TabocAttemptHardTimeout' "${REPO}/.taboc/opencode/attempts/scout-hard-timeout.1.log"
+grep -Fq 'done|opencode/nemotron-3-ultra-free|high|2' "${REPO}/.taboc/opencode/scout-hard-timeout.status"
 
 # Exact terminal records printed only in final JSON are safely materialized into journal.
 touch "${REPO}/.taboc/mock-output-only"
@@ -118,7 +143,8 @@ sleep 1.2
 
 # LaunchAgent receives model and attempt overrides from the launcher environment.
 rm "${REPO}/.taboc/mock-sleep"
-TABOC_MODELS=opencode/nemotron-3-ultra-free TABOC_MAX_ATTEMPTS=1 TABOC_STARTUP_HOLD=0 \
+TABOC_MODELS=opencode/nemotron-3-ultra-free TABOC_MAX_ATTEMPTS=1 \
+TABOC_ATTEMPT_TIMEOUT=7 TABOC_ATTEMPT_HARD_TIMEOUT=11 TABOC_STARTUP_HOLD=0 \
   bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
     --repo "${REPO}" --id scout-env --profile readonly --effort medium \
     --prompt-file "${TEST_ROOT}/prompt.txt" >/dev/null
@@ -128,6 +154,7 @@ for _ in $(seq 1 30); do
 done
 grep -Fq 'done|opencode/nemotron-3-ultra-free|medium|1' "${REPO}/.taboc/opencode/scout-env.status"
 grep -Fq 'opencode/nemotron-3-ultra-free|medium|' "${REPO}/.taboc/mock-calls.log"
+grep -Fq '|opencode/nemotron-3-ultra-free|1|7|11' "${REPO}/.taboc/mock-calls.log"
 
 # A task body mentioning quota-like words is not an OpenCode error event.
 printf '%s\n' '{"type":"text","text":"402 429 quota Capacity overload credit"}' > "${TEST_ROOT}/clean.jsonl"
@@ -175,4 +202,4 @@ if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task ef
   exit 1
 fi
 
-echo "PASS: prompt generation, timeout fallback, concurrent startup, env forwarding, terminal recovery, premium ceiling, live task panel"
+echo "PASS: adaptive idle/hard timeout, fallback, concurrent startup, env forwarding, terminal recovery, premium ceiling, live task panel"

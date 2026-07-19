@@ -8,7 +8,7 @@ from pathlib import Path
 RETRYABLE = re.compile(
     r"(?:^|\D)(?:402|429)(?:\D|$)|quota|rate.?limit|usage.?limit|credit|capacity|"
     r"overload|model.+(?:unavailable|not found|disabled)|ECONNRESET|ETIMEDOUT|"
-    r"ENOTFOUND|stream error|empty response|temporarily unavailable|TabocAttemptTimeout",
+    r"ENOTFOUND|stream error|empty response|temporarily unavailable|TabocAttempt(?:Idle|Hard)?Timeout",
     re.IGNORECASE,
 )
 

@@ -55,9 +55,16 @@ if [ "${1:-}" = "run" ]; then
     trap 'rmdir "${TABOC_MOCK_RUN_DB_LOCK_DIR}" 2>/dev/null || true' EXIT
     sleep 0.15
   fi
-  printf '%s|%s|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${OPENCODE_PERMISSION:-}" \
-    "${TABOC_MODELS:-}" "${TABOC_MAX_ATTEMPTS:-}" >> "${REPO}/.taboc/mock-calls.log"
+  printf '%s|%s|%s|%s|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${OPENCODE_PERMISSION:-}" \
+    "${TABOC_MODELS:-}" "${TABOC_MAX_ATTEMPTS:-}" "${TABOC_ATTEMPT_TIMEOUT:-}" \
+    "${TABOC_ATTEMPT_HARD_TIMEOUT:-}" >> "${REPO}/.taboc/mock-calls.log"
   [ -f "${REPO}/.taboc/mock-sleep" ] && sleep 1
+  if [ "${MODEL}" = "opencode/deepseek-v4-flash-free" ] && [ -f "${REPO}/.taboc/mock-active-long" ]; then
+    for STEP in 1 2 3 4 5; do
+      printf '{"type":"text","text":"progress-%s"}\n' "${STEP}"
+      sleep 0.4
+    done
+  fi
   if [ "${MODEL}" = "opencode/deepseek-v4-flash-free" ] && [ -f "${REPO}/.taboc/mock-deepseek-hang" ]; then
     sleep 5
   fi

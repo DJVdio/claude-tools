@@ -58,12 +58,13 @@ def stop_process(process: subprocess.Popen[bytes]) -> None:
         process.wait()
 
 
-def append_timeout(log: Path, timeout: float) -> None:
+def append_timeout(log: Path, kind: str, timeout: float) -> None:
+    label = "idle" if kind == "Idle" else "hard"
     event = {
         "type": "error",
         "error": {
-            "type": "TabocAttemptTimeout",
-            "message": f"OpenCode attempt exceeded {timeout:g} seconds",
+            "type": f"TabocAttempt{kind}Timeout",
+            "message": f"OpenCode attempt exceeded {timeout:g} seconds {label} timeout",
         },
     }
     with log.open("ab") as stream:
@@ -74,15 +75,23 @@ def append_timeout(log: Path, timeout: float) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--timeout", type=float, required=True)
+    parser.add_argument("--idle-timeout", type=float)
+    parser.add_argument("--hard-timeout", type=float)
+    parser.add_argument("--timeout", type=float, help=argparse.SUPPRESS)
     parser.add_argument("--log", required=True)
     parser.add_argument("--startup-lock", required=True)
     parser.add_argument("--startup-hold", type=float, default=1.5)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     options = parser.parse_args()
     command = options.command[1:] if options.command[:1] == ["--"] else options.command
-    if options.timeout <= 0 or not command:
-        parser.error("timeout must be positive and command is required")
+    idle_timeout = options.idle_timeout if options.idle_timeout is not None else options.timeout
+    hard_timeout = (
+        options.hard_timeout
+        if options.hard_timeout is not None
+        else (idle_timeout * 3 if idle_timeout else None)
+    )
+    if not idle_timeout or idle_timeout <= 0 or not hard_timeout or hard_timeout <= 0 or not command:
+        parser.error("idle timeout, hard timeout, and command must be positive")
     log = Path(options.log)
     lock = Path(options.startup_lock)
     acquire_lock(lock)
@@ -99,12 +108,30 @@ def main() -> int:
             time.sleep(0.05)
     finally:
         release_lock(lock)
-    try:
-        return process.wait(timeout=options.timeout)
-    except subprocess.TimeoutExpired:
-        stop_process(process)
-        append_timeout(log, options.timeout)
-        return 124
+    started = time.monotonic()
+    last_activity = started
+    observed_size = log.stat().st_size
+    while True:
+        code = process.poll()
+        if code is not None:
+            return code
+        now = time.monotonic()
+        try:
+            size = log.stat().st_size
+        except OSError:
+            size = observed_size
+        if size != observed_size:
+            observed_size = size
+            last_activity = now
+        if now - started >= hard_timeout:
+            stop_process(process)
+            append_timeout(log, "Hard", hard_timeout)
+            return 124
+        if now - last_activity >= idle_timeout:
+            stop_process(process)
+            append_timeout(log, "Idle", idle_timeout)
+            return 124
+        time.sleep(0.25)
 
 
 if __name__ == "__main__":

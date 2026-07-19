@@ -36,15 +36,20 @@ rg -q 'Task \| Agent \| Pool \| Model \| Effort \| State' skills/taboc/scripts/t
 rg -q 'premium child must inherit the main model' skills/taboc/scripts/register-assignment.sh && ok "高性能子 agent 不得超过主模型" || bad "可能出现 Luna 主 agent 派 Sol 子 agent"
 rg -q '免费 OpenCode 不受此.*限制' skills/taboc/SKILL.md && ok "免费模型不受主 agent 上限误伤" || bad "免费 OpenCode 被错误限制"
 rg -q '禁止.*免费.*全开 max' skills/taboc/SKILL.md && ok "免费模型仍按复杂度选档" || bad "免费模型可能无脑使用最高档"
-if rg -q 'run-with-timeout.py' skills/taboc/scripts/opencode-worker.sh && rg -q -- '--timeout' skills/taboc/scripts/opencode-worker.sh; then
-  ok "单模型调用有超时与进程组回收"
+if rg -q 'run-with-timeout.py' skills/taboc/scripts/opencode-worker.sh \
+  && rg -q -- '--idle-timeout' skills/taboc/scripts/opencode-worker.sh \
+  && rg -q -- '--hard-timeout' skills/taboc/scripts/opencode-worker.sh; then
+  ok "单模型调用有活动感知超时与总时长上限"
 else
-  bad "模型限额可能无限卡住 worker"
+  bad "模型可能误杀活跃任务或无限卡住 worker"
 fi
 rg -q 'startup.lock' skills/taboc/scripts/opencode-worker.sh && ok "OpenCode 冷启动有并发保护" || bad "并发冷启动可能争用 SQLite"
 rg -q 'model-query.lock' skills/taboc/scripts/opencode-worker.sh && ok "模型目录查询有并发保护" || bad "并发模型查询可能争用 SQLite"
+rg -q 'readonly:high.*450' skills/taboc/scripts/opencode-worker.sh \
+  && rg -q 'simple:high.*600' skills/taboc/scripts/opencode-worker.sh \
+  && ok "超时默认值按任务复杂度分级" || bad "所有任务可能再次共用固定超时"
 rg -q 'extract-terminal-record.py' skills/taboc/scripts/opencode-worker.sh && ok "最终 JSON 终态可安全恢复" || bad "模型完成但 journal 可能缺终态"
-rg -q 'TABOC_ATTEMPT_TIMEOUT TABOC_STARTUP_HOLD' skills/taboc/scripts/launch-opencode.sh && ok "LaunchAgent 透传运行策略" || bad "launcher 丢失模型或超时配置"
+rg -q 'TABOC_ATTEMPT_TIMEOUT TABOC_ATTEMPT_HARD_TIMEOUT TABOC_STARTUP_HOLD' skills/taboc/scripts/launch-opencode.sh && ok "LaunchAgent 透传运行策略" || bad "launcher 丢失模型或超时配置"
 rg -q 'run_lock.exists' skills/taboc/scripts/task-panel.py && ok "任务面板校验 worker 活性" || bad "任务面板可能永久显示陈旧 running"
 rg -q 'write-worker-prompt.py' skills/taboc/SKILL.md && ok "完整 worker 协议由脚本生成" || bad "主 agent 可能现编 worker 协议"
 rg -q '仅在.*非正常终态' skills/taboc/references/failures.md && ok "异常手册按需加载" || bad "异常细则可能常驻上下文"

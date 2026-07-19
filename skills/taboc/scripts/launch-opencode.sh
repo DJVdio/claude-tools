@@ -102,7 +102,7 @@ fi
 LOG_FILE="${STATE_DIR}/${WORKER_ID}.launcher.log"
 LAUNCH_PATH="$(dirname "${OPENCODE_BIN}"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 ENV_ARGS=()
-for ENV_NAME in TABOC_MODELS TABOC_MAX_ATTEMPTS TABOC_ATTEMPT_TIMEOUT TABOC_STARTUP_HOLD; do
+for ENV_NAME in TABOC_MODELS TABOC_MAX_ATTEMPTS TABOC_ATTEMPT_TIMEOUT TABOC_ATTEMPT_HARD_TIMEOUT TABOC_STARTUP_HOLD; do
   [ -n "${!ENV_NAME:-}" ] && ENV_ARGS+=("${ENV_NAME}=${!ENV_NAME}")
 done
 printf 'launched|pending|pending|0\n' > "${STATUS_FILE}"

@@ -193,6 +193,19 @@ journal_has_exact_since() {
   awk -v start="${START_LINE}" -v record="${RECORD}" 'NR > start && $0 == record {found=1; exit} END {exit(found ? 0 : 1)}' "${JOURNAL}"
 }
 
+default_idle_timeout() {
+  case "${PROFILE}:${EFFORT}" in
+    readonly:low) echo 180 ;;
+    readonly:medium) echo 300 ;;
+    readonly:high) echo 450 ;;
+    readonly:max|readonly:xhigh) echo 600 ;;
+    simple:low) echo 300 ;;
+    simple:medium) echo 450 ;;
+    simple:high) echo 600 ;;
+    simple:max|simple:xhigh) echo 900 ;;
+  esac
+}
+
 MODEL=""
 VARIANT=""
 ATTEMPT=0
@@ -200,10 +213,14 @@ MAX_ATTEMPTS="${TABOC_MAX_ATTEMPTS:-8}"
 PREVIOUS=""
 LAST_MODEL="-"
 LAST_VARIANT="-"
-ATTEMPT_TIMEOUT="${TABOC_ATTEMPT_TIMEOUT:-300}"
+DEFAULT_ATTEMPT_TIMEOUT="$(default_idle_timeout)"
+ATTEMPT_TIMEOUT="${TABOC_ATTEMPT_TIMEOUT:-${DEFAULT_ATTEMPT_TIMEOUT}}"
+ATTEMPT_HARD_TIMEOUT="${TABOC_ATTEMPT_HARD_TIMEOUT:-}"
 STARTUP_HOLD="${TABOC_STARTUP_HOLD:-1.5}"
-case "${ATTEMPT_TIMEOUT}" in ''|*[!0-9]*) ATTEMPT_TIMEOUT=300 ;; esac
-[ "${ATTEMPT_TIMEOUT}" -gt 0 ] || ATTEMPT_TIMEOUT=300
+case "${ATTEMPT_TIMEOUT}" in ''|*[!0-9]*) ATTEMPT_TIMEOUT="${DEFAULT_ATTEMPT_TIMEOUT}" ;; esac
+[ "${ATTEMPT_TIMEOUT}" -gt 0 ] || ATTEMPT_TIMEOUT="${DEFAULT_ATTEMPT_TIMEOUT}"
+case "${ATTEMPT_HARD_TIMEOUT}" in ''|*[!0-9]*) ATTEMPT_HARD_TIMEOUT=$((ATTEMPT_TIMEOUT * 3)) ;; esac
+[ "${ATTEMPT_HARD_TIMEOUT}" -gt 0 ] || ATTEMPT_HARD_TIMEOUT=$((ATTEMPT_TIMEOUT * 3))
 case "${MAX_ATTEMPTS}" in ''|*[!0-9]*) MAX_ATTEMPTS=8 ;; esac
 [ "${MAX_ATTEMPTS}" -gt 0 ] || MAX_ATTEMPTS=8
 
@@ -227,7 +244,8 @@ while IFS= read -r MODEL; do
 
   set +e
   OPENCODE_PERMISSION="${PERMISSIONS}" OPENCODE_DISABLE_AUTOUPDATE=true OPENCODE_AUTO_SHARE=false \
-    python3 "${SCRIPT_DIR}/run-with-timeout.py" --timeout "${ATTEMPT_TIMEOUT}" \
+    python3 "${SCRIPT_DIR}/run-with-timeout.py" --idle-timeout "${ATTEMPT_TIMEOUT}" \
+      --hard-timeout "${ATTEMPT_HARD_TIMEOUT}" \
       --log "${ATTEMPT_LOG}" --startup-lock "${STATE_DIR}/startup.lock" \
       --startup-hold "${STARTUP_HOLD}" -- "${COMMAND[@]}"
   CODE=$?
