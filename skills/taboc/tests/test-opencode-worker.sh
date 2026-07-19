@@ -172,8 +172,8 @@ cat > "${REPO}/.taboc/board.md" <<'EOF'
 | stale-worker | stale-worker | opencode | running |
 EOF
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task risky-fix \
-  --agent premium-one --pool premium --model luna --effort high \
-  --main-model luna --main-effort max
+  --agent premium-one --pool premium --model inherit-main --effort high \
+  --main-effort max
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task cheap-audit \
   --agent premium-terra --pool premium --model terra --effort medium \
   --main-model luna --main-effort max
@@ -181,7 +181,7 @@ printf 'running|opencode/deepseek-v4-flash-free|high|1\n' > "${REPO}/.taboc/open
 printf '99999999\n' > "${REPO}/.taboc/opencode/stale-worker.pid"
 PANEL="$(bash "${SKILL_DIR}/scripts/task-panel.sh" --repo "${REPO}")"
 printf '%s\n' "${PANEL}" | grep -Fq '| scout-two | scout-two | opencode | opencode/deepseek-v4-flash-free | medium | done |'
-printf '%s\n' "${PANEL}" | grep -Fq '| risky-fix | premium-one | premium | luna | high | running |'
+printf '%s\n' "${PANEL}" | grep -Fq '| risky-fix | premium-one | premium | inherit-main | high | running |'
 printf '%s\n' "${PANEL}" | grep -Fq '| cheap-audit | premium-terra | premium | terra | medium | running |'
 printf '%s\n' "${PANEL}" | grep -Fq '| stale-worker | stale-worker | opencode | opencode/deepseek-v4-flash-free | high | lost |'
 
@@ -194,6 +194,12 @@ if bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
 fi
 
 # Lower effort cannot justify upgrading the child to a stronger model family.
+if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task screenshot-regression \
+  --agent premium-false-high --pool premium --model sol --effort high \
+  --main-model sol --main-effort high >/dev/null 2>&1; then
+  echo "explicit Sol-high unexpectedly accepted via a falsely reported Sol-high main" >&2
+  exit 1
+fi
 if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task model-inversion \
   --agent premium-sol --pool premium --model sol --effort high \
   --main-model luna --main-effort max >/dev/null 2>&1; then
@@ -213,4 +219,4 @@ if bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${REPO}" --task un
   exit 1
 fi
 
-echo "PASS: adaptive timeout, fallback, concurrent startup, weaker premium tier, premium ceiling, live task panel"
+echo "PASS: adaptive timeout, fallback, concurrent startup, strict premium inheritance, live task panel"

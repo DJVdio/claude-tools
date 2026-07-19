@@ -37,6 +37,8 @@ rg -q 'check-model-ceiling.py' skills/taboc/scripts/register-assignment.sh && ok
 rg -q 'Sol > Luna > Terra' skills/taboc/SKILL.md && ok "premium 允许同系列已知弱档" || bad "低风险 premium 不能降模型省额度"
 rg -q '免费 OpenCode 不受此.*限制' skills/taboc/SKILL.md && ok "免费模型不受主 agent 上限误伤" || bad "免费 OpenCode 被错误限制"
 rg -q '禁止.*免费.*全开 max' skills/taboc/SKILL.md && ok "免费模型仍按复杂度选档" || bad "免费模型可能无脑使用最高档"
+rg -q '省略该维.*reasoning_effort.*thinking.*override' skills/taboc/SKILL.md && ok "premium 同 effort 强制继承" || bad "premium 可能显式升级 effort"
+rg -q '手写 assignments 绕过脚本' skills/taboc/SKILL.md && ok "premium 禁止伪造登记" || bad "premium 可绕过登记门禁"
 if rg -q 'run-with-timeout.py' skills/taboc/scripts/opencode-worker.sh \
   && rg -q -- '--idle-timeout' skills/taboc/scripts/opencode-worker.sh \
   && rg -q -- '--hard-timeout' skills/taboc/scripts/opencode-worker.sh; then

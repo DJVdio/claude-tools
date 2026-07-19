@@ -25,11 +25,9 @@ while [ "${#}" -gt 0 ]; do
 done
 
 if [ "${POOL}" = premium ]; then
-  [ -n "${MAIN_MODEL}" ] && [ -n "${MAIN_EFFORT}" ] \
-    || { echo "premium assignments require --main-model and --main-effort" >&2; exit 2; }
   python3 "${SCRIPT_DIR}/check-model-ceiling.py" \
     --model "${MODEL}" --effort "${EFFORT}" \
-    --main-model "${MAIN_MODEL}" --main-effort "${MAIN_EFFORT}"
+    --main-model "${MAIN_MODEL}" --main-effort "${MAIN_EFFORT}" --strict-overrides
 fi
 
 [ -d "${REPO}" ] && [ -n "${TASK}" ] && [ -n "${AGENT}" ] && [ -n "${POOL}" ] && [ -n "${MODEL}" ] && [ -n "${EFFORT}" ] \
