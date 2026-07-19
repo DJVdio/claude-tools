@@ -34,8 +34,23 @@ STATE_DIR="${REPO}/.taboc/opencode"
 mkdir -p "${STATE_DIR}/attempts"
 STATUS_FILE="${STATE_DIR}/${WORKER_ID}.status"
 JOURNAL="${REPO}/.taboc/journal.md"
+touch "${JOURNAL}"
 PID_FILE="${STATE_DIR}/${WORKER_ID}.pid"
 RUN_LOCK="${TABOC_RUN_LOCK:-${STATE_DIR}/${WORKER_ID}.run}"
+QUOTA_STATE="${TABOC_QUOTA_STATE:-${XDG_STATE_HOME:-${HOME}/.local/state}/taboc/opencode-free-quota.json}"
+QUOTA_FALLBACK_SECONDS="${TABOC_QUOTA_FALLBACK_SECONDS:-86400}"
+
+check_quota() {
+  python3 "${SCRIPT_DIR}/quota-state.py" check --state "${QUOTA_STATE}"
+}
+
+QUOTA_CODE=0
+QUOTA_INFO="$(check_quota)" || QUOTA_CODE=$?
+if [ "${QUOTA_CODE}" -eq 75 ]; then
+  printf 'blocked|quota|-|0\n' > "${STATUS_FILE}"
+  printf '[POOL_QUOTA] %s | %s | shared OpenCode free quota; keep queued\n' "${WORKER_ID}" "${QUOTA_INFO}" >> "${JOURNAL}"
+  exit 75
+fi
 
 cleanup_runtime() {
   rmdir "${RUN_LOCK}" 2>/dev/null || true
@@ -82,12 +97,6 @@ if [ "${PROFILE}" = "readonly" ]; then
 else
   PERMISSIONS='{"*":"allow","question":"deny","task":"deny","external_directory":"deny","bash":{"*":"allow","git commit*":"deny","git push*":"deny","git reset*":"deny","git clean*":"deny","git checkout*":"deny","git switch*":"deny","sudo *":"deny","rm -rf *":"deny"}}'
 fi
-
-available_models() {
-  local OUTPUT=""
-  OUTPUT="$(query_models || true)"
-  printf '%s\n' "${OUTPUT}" | awk '/^opencode\/.+-free$/ {print}'
-}
 
 supports_variant() {
   local MODEL="$1"
@@ -147,25 +156,12 @@ choose_variant() {
 }
 
 build_candidates() {
-  local FOUND=""
-  local MODEL=""
   local CONFIGURED="${TABOC_MODELS:-}"
-  local DEFAULTS="opencode/deepseek-v4-flash-free opencode/nemotron-3-ultra-free opencode/mimo-v2.5-free opencode/north-mini-code-free opencode/hy3-free"
   if [ -n "${CONFIGURED}" ]; then
-    printf '%s\n' "${CONFIGURED}" | tr ',' '\n'
+    printf '%s\n' "${CONFIGURED}" | tr ',' '\n' | awk 'NF {print; exit}'
     return
   fi
-  FOUND="$(available_models)"
-  if [ -z "${FOUND}" ]; then
-    printf '%s\n' "${DEFAULTS}" | tr ' ' '\n'
-    return
-  fi
-  for MODEL in ${DEFAULTS}; do
-    printf '%s\n' "${FOUND}" | grep -Fxq "${MODEL}" && echo "${MODEL}"
-  done
-  printf '%s\n' "${FOUND}" | while IFS= read -r MODEL; do
-    printf '%s\n' "${DEFAULTS}" | tr ' ' '\n' | grep -Fxq "${MODEL}" || echo "${MODEL}"
-  done
+  echo "opencode/deepseek-v4-flash-free"
 }
 
 cleanup_owned_locks() {
@@ -209,8 +205,7 @@ default_idle_timeout() {
 MODEL=""
 VARIANT=""
 ATTEMPT=0
-MAX_ATTEMPTS="${TABOC_MAX_ATTEMPTS:-8}"
-PREVIOUS=""
+MAX_ATTEMPTS="${TABOC_MAX_ATTEMPTS:-1}"
 LAST_MODEL="-"
 LAST_VARIANT="-"
 DEFAULT_ATTEMPT_TIMEOUT="$(default_idle_timeout)"
@@ -221,11 +216,18 @@ case "${ATTEMPT_TIMEOUT}" in ''|*[!0-9]*) ATTEMPT_TIMEOUT="${DEFAULT_ATTEMPT_TIM
 [ "${ATTEMPT_TIMEOUT}" -gt 0 ] || ATTEMPT_TIMEOUT="${DEFAULT_ATTEMPT_TIMEOUT}"
 case "${ATTEMPT_HARD_TIMEOUT}" in ''|*[!0-9]*) ATTEMPT_HARD_TIMEOUT=$((ATTEMPT_TIMEOUT * 3)) ;; esac
 [ "${ATTEMPT_HARD_TIMEOUT}" -gt 0 ] || ATTEMPT_HARD_TIMEOUT=$((ATTEMPT_TIMEOUT * 3))
-case "${MAX_ATTEMPTS}" in ''|*[!0-9]*) MAX_ATTEMPTS=8 ;; esac
-[ "${MAX_ATTEMPTS}" -gt 0 ] || MAX_ATTEMPTS=8
+case "${MAX_ATTEMPTS}" in ''|*[!0-9]*) MAX_ATTEMPTS=1 ;; esac
+[ "${MAX_ATTEMPTS}" -gt 0 ] || MAX_ATTEMPTS=1
 
 while IFS= read -r MODEL; do
   [ -n "${MODEL}" ] || continue
+  QUOTA_CODE=0
+  QUOTA_INFO="$(check_quota)" || QUOTA_CODE=$?
+  if [ "${QUOTA_CODE}" -eq 75 ]; then
+    printf 'blocked|quota|-|%s\n' "${ATTEMPT}" > "${STATUS_FILE}"
+    printf '[POOL_QUOTA] %s | %s | shared OpenCode free quota; keep queued\n' "${WORKER_ID}" "${QUOTA_INFO}" >> "${JOURNAL}"
+    exit 75
+  fi
   ATTEMPT=$((ATTEMPT + 1))
   [ "${ATTEMPT}" -le "${MAX_ATTEMPTS}" ] || break
   VARIANT="$(choose_variant "${MODEL}" "${EFFORT}")"
@@ -233,10 +235,6 @@ while IFS= read -r MODEL; do
   LAST_VARIANT="${VARIANT:-default}"
   ATTEMPT_LOG="${STATE_DIR}/attempts/${WORKER_ID}.${ATTEMPT}.log"
   printf 'running|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${ATTEMPT}" > "${STATUS_FILE}"
-  if [ -n "${PREVIOUS}" ]; then
-    printf '[MODEL_FALLBACK] %s | %s → %s:%s | infrastructure\n' "${WORKER_ID}" "${PREVIOUS}" "${MODEL}" "${VARIANT:-default}" >> "${JOURNAL}"
-  fi
-
   COMMAND=("${OPENCODE_BIN}" run --dir "${REPO}" --model "${MODEL}" --format json --title "taboc-${WORKER_ID}")
   [ -n "${VARIANT}" ] && COMMAND+=(--variant "${VARIANT}")
   COMMAND+=("$(<"${PROMPT_FILE}")")
@@ -268,6 +266,16 @@ while IFS= read -r MODEL; do
     exit 0
   fi
 
+  if [ "${CLASSIFICATION}" = "quota" ]; then
+    cleanup_owned_locks
+    QUOTA_INFO="$(python3 "${SCRIPT_DIR}/quota-state.py" record --state "${QUOTA_STATE}" \
+      --log "${ATTEMPT_LOG}" --model "${MODEL}" --fallback-seconds "${QUOTA_FALLBACK_SECONDS}")"
+    printf 'blocked|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${ATTEMPT}" > "${STATUS_FILE}"
+    printf '[POOL_QUOTA] %s | %s | %s | shared OpenCode free quota; no model fallback\n' \
+      "${WORKER_ID}" "${MODEL}" "${QUOTA_INFO}" >> "${JOURNAL}"
+    exit 75
+  fi
+
   if [ "${CLASSIFICATION}" = "error" ]; then
     cleanup_owned_locks
     printf 'failed|%s|%s|%s\n' "${MODEL}" "${VARIANT:-default}" "${ATTEMPT}" > "${STATUS_FILE}"
@@ -283,9 +291,9 @@ while IFS= read -r MODEL; do
   fi
 
   cleanup_owned_locks
-  PREVIOUS="${MODEL}:${VARIANT:-default}"
 done < <(build_candidates)
 
 printf 'exhausted|%s|%s|%s\n' "${LAST_MODEL}" "${LAST_VARIANT}" "${ATTEMPT}" > "${STATUS_FILE}"
-printf '[MODEL_EXHAUSTED] %s | tried=%s | inspect %s/attempts/%s.*.log\n' "${WORKER_ID}" "${ATTEMPT}" "${STATE_DIR}" "${WORKER_ID}" >> "${JOURNAL}"
+printf '[MODEL_EXHAUSTED] %s | DeepSeek unavailable; no other free-model fallback | inspect %s/attempts/%s.*.log\n' \
+  "${WORKER_ID}" "${STATE_DIR}" "${WORKER_ID}" >> "${JOURNAL}"
 exit 75

@@ -5,8 +5,9 @@ import sys
 from pathlib import Path
 
 
+QUOTA = re.compile(r"(?:^|\D)(?:402|429)(?:\D|$)|quota|rate.?limit|usage.?limit|credit", re.IGNORECASE)
 RETRYABLE = re.compile(
-    r"(?:^|\D)(?:402|429)(?:\D|$)|quota|rate.?limit|usage.?limit|credit|capacity|"
+    r"capacity|"
     r"overload|model.+(?:unavailable|not found|disabled)|ECONNRESET|ETIMEDOUT|"
     r"ENOTFOUND|stream error|empty response|temporarily unavailable|TabocAttempt(?:Idle|Hard)?Timeout",
     re.IGNORECASE,
@@ -28,6 +29,8 @@ def main() -> int:
                 errors.append(json.dumps(event, ensure_ascii=False))
     if not errors:
         print("clean")
+    elif any(QUOTA.search(error) for error in errors):
+        print("quota")
     elif any(RETRYABLE.search(error) for error in errors):
         print("retryable")
     else:

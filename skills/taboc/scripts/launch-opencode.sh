@@ -2,6 +2,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+QUOTA_STATE="${TABOC_QUOTA_STATE:-${XDG_STATE_HOME:-${HOME}/.local/state}/taboc/opencode-free-quota.json}"
+
+check_quota() {
+  python3 "${SCRIPT_DIR}/quota-state.py" check --state "${QUOTA_STATE}"
+}
 
 resolve_opencode_bin() {
   local CANDIDATE=""
@@ -26,6 +31,9 @@ resolve_opencode_bin() {
 if [ "${1:-}" = "--check" ]; then
   command -v launchctl >/dev/null 2>&1 || { echo "taboc requires macOS launchctl" >&2; exit 69; }
   command -v python3 >/dev/null 2>&1 || { echo "taboc requires python3" >&2; exit 69; }
+  QUOTA_CODE=0
+  QUOTA_INFO="$(check_quota)" || QUOTA_CODE=$?
+  [ "${QUOTA_CODE}" -ne 75 ] || { echo "OpenCode free pool ${QUOTA_INFO}" >&2; exit 75; }
   OPENCODE_BIN="$(resolve_opencode_bin)" || { echo "opencode not found; checked PATH, /opt/homebrew/bin, /usr/local/bin, ~/.local/bin" >&2; exit 127; }
   printf 'ready|%s|%s\n' "${OPENCODE_BIN}" "$("${OPENCODE_BIN}" --version 2>/dev/null || echo unknown)"
   exit 0
@@ -68,6 +76,15 @@ DOMAIN="gui/$(id -u)"
 mkdir -p "${STATE_DIR}/attempts"
 touch "${JOURNAL}"
 
+QUOTA_CODE=0
+QUOTA_INFO="$(check_quota)" || QUOTA_CODE=$?
+if [ "${QUOTA_CODE}" -eq 75 ]; then
+  printf 'blocked|quota|-|0\n' > "${STATUS_FILE}"
+  printf '[POOL_QUOTA] %s | %s | shared OpenCode free quota; keep queued\n' "${WORKER_ID}" "${QUOTA_INFO}" >> "${JOURNAL}"
+  echo "OpenCode free pool ${QUOTA_INFO}" >&2
+  exit 75
+fi
+
 if ! command -v launchctl >/dev/null 2>&1; then
   printf 'blocked|launchctl-missing|-|0\n' > "${STATUS_FILE}"
   printf '[POOL_BLOCKED] %s | launchctl unavailable | keep task queued; do not upgrade\n' "${WORKER_ID}" >> "${JOURNAL}"
@@ -102,7 +119,7 @@ fi
 LOG_FILE="${STATE_DIR}/${WORKER_ID}.launcher.log"
 LAUNCH_PATH="$(dirname "${OPENCODE_BIN}"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 ENV_ARGS=()
-for ENV_NAME in TABOC_MODELS TABOC_MAX_ATTEMPTS TABOC_ATTEMPT_TIMEOUT TABOC_ATTEMPT_HARD_TIMEOUT TABOC_STARTUP_HOLD; do
+for ENV_NAME in TABOC_MODELS TABOC_MAX_ATTEMPTS TABOC_ATTEMPT_TIMEOUT TABOC_ATTEMPT_HARD_TIMEOUT TABOC_STARTUP_HOLD TABOC_QUOTA_STATE TABOC_QUOTA_FALLBACK_SECONDS; do
   [ -n "${!ENV_NAME:-}" ] && ENV_ARGS+=("${ENV_NAME}=${!ENV_NAME}")
 done
 printf 'launched|pending|pending|0\n' > "${STATUS_FILE}"

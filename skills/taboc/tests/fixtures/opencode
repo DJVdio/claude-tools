@@ -69,7 +69,7 @@ if [ "${1:-}" = "run" ]; then
     sleep 5
   fi
   if [ "${MODEL}" = "opencode/deepseek-v4-flash-free" ] && [ -f "${REPO}/.taboc/mock-deepseek-fail" ]; then
-    echo '{"type":"error","error":"429 quota exceeded"}'
+    echo '{"type":"error","error":"429 quota exceeded","retry_after":3600}'
     exit 1
   fi
   WORKER_ID="${TITLE#taboc-}"
