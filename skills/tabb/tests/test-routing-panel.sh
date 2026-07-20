@@ -23,6 +23,13 @@ route() {
 [ "$(route complex-long)" = $'premium\tgpt-5.6-sol\tmedium' ]
 [ "$(route very-complex)" = $'premium\tgpt-5.6-sol\thigh' ]
 
+grep -Fq '规模只决定拆单，不决定模型' "${SKILL_DIR}/SKILL.md"
+grep -Fq 'Sol 必须有具体理由' "${SKILL_DIR}/SKILL.md"
+if grep -Eq '^\| `complex-long` \|.*(30 分钟|4 个以上业务文件)' "${SKILL_DIR}/SKILL.md"; then
+  echo "complex-long unexpectedly uses task size as a routing signal" >&2
+  exit 1
+fi
+
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${TEST_ROOT}" \
   --task 查调用链 --agent scout-auth --role readonly --model gpt-5.6-luna --effort low
 bash "${SKILL_DIR}/scripts/register-assignment.sh" --repo "${TEST_ROOT}" \

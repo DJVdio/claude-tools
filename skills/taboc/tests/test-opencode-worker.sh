@@ -32,6 +32,13 @@ route() {
 [ "$(route complex-long)" = $'premium\tgpt-5.6-sol\tmedium' ]
 [ "$(route very-complex)" = $'premium\tgpt-5.6-sol\thigh' ]
 
+grep -Fq '规模只决定拆单，不决定模型' "${SKILL_DIR}/SKILL.md"
+grep -Fq 'Sol 必须有具体理由' "${SKILL_DIR}/SKILL.md"
+if grep -Eq '^\| `complex-long` \|.*(30 分钟|4 个以上业务文件)' "${SKILL_DIR}/SKILL.md"; then
+  echo "complex-long unexpectedly uses task size as a routing signal" >&2
+  exit 1
+fi
+
 # Prompt generator carries the complete profile-specific protocol without loading it into SKILL.md.
 python3 "${SKILL_DIR}/scripts/write-worker-prompt.py" \
   --output "${TEST_ROOT}/readonly.prompt" --repo "${REPO}" --branch main \
