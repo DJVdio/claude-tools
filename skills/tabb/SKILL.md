@@ -100,8 +100,8 @@ rm -rf "${L}"
 ## 主 agent 流程
 
 1. 建 `.tabb/locks/`、board 表头、journal、assignments；把 `.tabb/` 加入 `.gitignore` 的工作派给 worker。
-2. 拆并行任务写入 board；明确依赖，blocked 任务不得提前 spawn。
-3. 先运行固定路由脚本；输出为 `pool<TAB>model<TAB>effort`，必须原样用于登记和 spawn：
+2. 拆并行任务写入 board；明确依赖，未成功 spawn 的任务保持 `open` / `blocked`，不得先标 `doing`。
+3. 先运行固定路由脚本；输出为 `pool<TAB>model<TAB>effort`，必须原样用于登记，并按下述显式覆盖/父模型继承规则派发：
 
    ```bash
    python3 <skill-dir>/scripts/route-task.py --class <readonly|simple|complex-short|complex-long|very-complex>
@@ -110,13 +110,23 @@ rm -rf "${L}"
      --model "<脚本 model>" --effort "<脚本 effort>"
    ```
 
-4. 为每个 worker 嵌入下节完整协议。spawn 必须显式传脚本给出的 model 与 effort；登记失败不得 spawn，也不得手写 assignments 绕过脚本。
+4. 为每个 worker 嵌入下节完整协议。登记失败不得 spawn，也不得手写 assignments 绕过脚本。spawn 成功后才把 board 改为 `doing`；失败则改为 `blocked:<真实错误>`，禁止面板虚报在途。
 5. 轮询 locks、board、journal 和在途 agent 里程碑：
    - `[DECISION]`：立即带推荐方案上抛用户；裁决写回 journal。
    - `[HANDOFF]`：放行对应 blocked 任务。派单只叫下游自行读该条，不复述正文。
    - `[DONE]+[SEAL]` / `[HANDOFF]`：更新完成状态；锁已释放即可推进。
 6. worker 全部完成后关闭它们，释放并发槽；创建唯一 git-ops，按任务类别路由后跑全量验证，PASS 才 seal。
 7. 从真实回执汇报结果；不凭记忆宣称完成、提交、推送或生效。
+
+### Premium spawn 模型传递
+
+路由脚本给出的 model/effort 是**目标实际运行档**；spawn 参数只是把它传给调度器的方式。派发前先读当前 spawn 工具声明的可显式覆盖模型，不用一次必然失败的调用做探测。
+
+- **显式覆盖：**目标模型在工具 allowlist 中，显式传脚本给出的 `model` 和 `reasoning_effort`。
+- **父模型继承：**目标模型不在 allowlist，但确认它就是当前主 agent 模型时，spawn **省略 `model`** 以继承当前模型；若工具允许独立覆盖 effort，仍传脚本的 `reasoning_effort`。Codex 中传 effort 时用 `fork_turns="none"` 或正整数，不用会强制全量继承 effort 的 `all`。
+- **不可用：**目标模型既不能显式覆盖，也不是当前主模型（或目标 effort 也无法精确传递）时，在 spawn 前阻塞并如实报告。禁止改传 Sol/Terra 或其他模型。
+
+父模型继承是同一目标模型的合法传递，不是静默替换。assignments 仍登记脚本的目标 model/effort；给用户的派单回执注明 `explicit` 或 `inherit-parent`，不把 UI 可选列表误当成 spawn allowlist。
 
 主 agent 不转述 agent 间协调内容。派单正文只进工具调用；给用户登记一行：`→ 已派 impl-auth：修登录鉴权（黑板协调）`。若 harness 使用 `SendMessage`，只传 `to` / `summary` / `message`；禁止手写 `<invoke>` / `<parameter>` 或附加字段。出现 malformed 立即停，回到合法工具调用，以真实回执为准。
 

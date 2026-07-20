@@ -25,6 +25,14 @@ route() {
 
 grep -Fq '规模只决定拆单，不决定模型' "${SKILL_DIR}/SKILL.md"
 grep -Fq 'Sol 必须有具体理由' "${SKILL_DIR}/SKILL.md"
+grep -Fq '父模型继承' "${SKILL_DIR}/SKILL.md"
+grep -Fq '省略 `model`' "${SKILL_DIR}/SKILL.md"
+grep -Fq 'spawn 成功后才把 board 改为 `doing`' "${SKILL_DIR}/SKILL.md"
+grep -Fq '禁止改传 Sol/Terra' "${SKILL_DIR}/SKILL.md"
+if grep -Fq 'spawn 必须显式传脚本给出的 model' "${SKILL_DIR}/SKILL.md"; then
+  echo "skill still requires an unsupported explicit model override" >&2
+  exit 1
+fi
 if grep -Eq '^\| `complex-long` \|.*(30 分钟|4 个以上业务文件)' "${SKILL_DIR}/SKILL.md"; then
   echo "complex-long unexpectedly uses task size as a routing signal" >&2
   exit 1
