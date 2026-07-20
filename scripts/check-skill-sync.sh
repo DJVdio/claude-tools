@@ -62,13 +62,16 @@ else ok "ta/SKILL.md 不依赖 tabb 的文件"; fi
 if grep -n 'skills/ta/' skills/tabb/SKILL.md 2>/dev/null; then
   bad "tabb/SKILL.md 引用了 ta 的文件——单装 tabb 时会指向不存在的路径"
 else ok "tabb/SKILL.md 不依赖 ta 的文件"; fi
+if grep -nE 'skills/(ta|tabb)/' skills/taboc/SKILL.md 2>/dev/null; then
+  bad "taboc/SKILL.md 引用了其他编排 skill——单装 taboc 时会指向不存在的路径"
+else ok "taboc/SKILL.md 不依赖其他编排 skill"; fi
 
 echo "══ 4. 不得留「沿用/不赘述」式悬空引用（对 agent 无效）══"
 HITS=$(grep -nE '(沿用|复用|同) \[\[ta\]\]|不赘述|沿用 ta' skills/tabb/SKILL.md 2>/dev/null)
 if [ -n "${HITS}" ]; then
   bad "tabb/SKILL.md 有悬空引用——agent 读不到 ta 的正文，必须就地展开："
   echo "${HITS}" | sed 's/^/     /'
-else ok "tabb/SKILL.md 无悬空引用（提及 ta 仅用于选型对比）"; fi
+else ok "tabb/SKILL.md 无悬空引用"; fi
 
 echo "══ 5. seal.sh 语法 + 变量边界地雷（变量后紧跟中文标点会被吃进变量名）══"
 for s in ta tabb; do

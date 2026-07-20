@@ -14,15 +14,15 @@
 | 最终 JSON 含严格匹配 worker id 的终态 | worker 自动补写 journal；不匹配的自由文本不采纳 |
 | 任务正文出现 quota、capacity、402 | 不算错误；只认顶层 `type=error` 或 CLI 非零退出 |
 
-超时使用两层门禁：日志持续增长会重置 idle timeout，适合长时间编码和测试；hard timeout 限制总耗时，避免持续噪声无限运行。默认 idle timeout 按任务分级：`readonly` 的 low/medium/high/max 为 180/300/450/600 秒，`simple` 为 300/450/600/900 秒；hard timeout 默认为 idle 的 3 倍。`TABOC_ATTEMPT_TIMEOUT` 覆盖 idle，`TABOC_ATTEMPT_HARD_TIMEOUT` 覆盖 hard；`TABOC_MODELS` 只取首个显式模型，不是回退列表；`TABOC_STARTUP_HOLD` 调整冷启动错峰。额度状态位于 XDG state 目录的 `taboc/opencode-free-quota.json`，服务未给解除时间时保守记录 24 小时，`TABOC_QUOTA_FALLBACK_SECONDS` 可覆盖。launcher 会透传这些变量。
+超时使用两层门禁：日志增长会重置 idle timeout，hard timeout 限制总耗时。low/medium/high/max 的默认 idle 分别为 180/300/450/600 秒，hard 默认为 idle 的 3 倍。`TABOC_ATTEMPT_TIMEOUT` / `TABOC_ATTEMPT_HARD_TIMEOUT` 可覆盖；`TABOC_MODELS` 只取首个模型，不是回退列表；`TABOC_STARTUP_HOLD` 调整冷启动错峰。额度状态在 XDG state 目录的 `taboc/opencode-free-quota.json`，无服务解除时间时默认记录 24 小时，`TABOC_QUOTA_FALLBACK_SECONDS` 可覆盖。
 
 ## 并发、状态与锁
 
 - 模型查询和 CLI 冷启动短暂串行化以避开 OpenCode SQLite 锁；模型执行仍并行，不要手工改成逐个等待。
-- 面板标 `lost`：以 run lock + pid 双重确认；只清理 `meta` 所属 id 的锁，把任务退回 open。
+- 面板标 `lost`：以 run lock + pid 双重确认，再把任务退回 open。OpenCode 是纯只读 worker，不应持有业务文件锁。
 - journal 已有终态但进程状态未收尾：以 journal 推进，不重复启动同 id。
 - 两 worker 撞任务：board 回读失败者让位；文件锁决定写权限。
-- 失败重试只清同一 worker id 的锁，保留已有改动；续跑 prompt 必须要求先检查现状。
+- 续跑同一只读任务时先检查 journal 现状，避免重复结论。
 
 ## 收口故障
 

@@ -41,7 +41,6 @@ fi
 
 REPO=""
 WORKER_ID=""
-PROFILE=""
 EFFORT=""
 PROMPT_FILE=""
 RETRY=""
@@ -50,7 +49,6 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --repo) REPO="$2"; shift 2 ;;
     --id) WORKER_ID="$2"; shift 2 ;;
-    --profile) PROFILE="$2"; shift 2 ;;
     --effort) EFFORT="$2"; shift 2 ;;
     --prompt-file) PROMPT_FILE="$2"; shift 2 ;;
     --retry) RETRY="yes"; shift ;;
@@ -61,7 +59,6 @@ done
 [ -d "${REPO}" ] && [ -n "${WORKER_ID}" ] && [ -f "${PROMPT_FILE}" ] || { echo "missing or invalid arguments" >&2; exit 2; }
 case "${REPO}" in /*) ;; *) echo "repo must be an absolute path" >&2; exit 2 ;; esac
 case "${WORKER_ID}" in *[!A-Za-z0-9._-]*) echo "invalid worker id" >&2; exit 2 ;; esac
-case "${PROFILE}" in readonly|simple) ;; *) echo "invalid profile" >&2; exit 2 ;; esac
 case "${EFFORT}" in low|medium|high|max|xhigh) ;; *) echo "invalid effort" >&2; exit 2 ;; esac
 STATE_DIR="${REPO}/.taboc/opencode"
 RUN_LOCK="${STATE_DIR}/${WORKER_ID}.run"
@@ -119,7 +116,7 @@ fi
 LOG_FILE="${STATE_DIR}/${WORKER_ID}.launcher.log"
 LAUNCH_PATH="$(dirname "${OPENCODE_BIN}"):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 ENV_ARGS=()
-for ENV_NAME in TABOC_MODELS TABOC_MAX_ATTEMPTS TABOC_ATTEMPT_TIMEOUT TABOC_ATTEMPT_HARD_TIMEOUT TABOC_STARTUP_HOLD TABOC_QUOTA_STATE TABOC_QUOTA_FALLBACK_SECONDS; do
+for ENV_NAME in TABOC_MODELS TABOC_ATTEMPT_TIMEOUT TABOC_ATTEMPT_HARD_TIMEOUT TABOC_STARTUP_HOLD TABOC_QUOTA_STATE TABOC_QUOTA_FALLBACK_SECONDS; do
   [ -n "${!ENV_NAME:-}" ] && ENV_ARGS+=("${ENV_NAME}=${!ENV_NAME}")
 done
 printf 'launched|pending|pending|0\n' > "${STATUS_FILE}"
@@ -132,7 +129,7 @@ python3 "${SCRIPT_DIR}/write-launch-plist.py" --output "${PLIST_FILE}" --label "
   "${ENV_ARGS[@]}" \
   "PATH=${LAUNCH_PATH}" "HOME=${HOME}" "TMPDIR=${TMPDIR:-/tmp}" \
   /bin/bash "${SCRIPT_DIR}/opencode-worker.sh" --repo "${REPO}" --id "${WORKER_ID}" \
-  --profile "${PROFILE}" --effort "${EFFORT}" --prompt-file "${PROMPT_FILE}"
+  --effort "${EFFORT}" --prompt-file "${PROMPT_FILE}"
 
 bash "${SCRIPT_DIR}/register-assignment.sh" --repo "${REPO}" --task "${WORKER_ID}" \
   --agent "${WORKER_ID}" --pool opencode --model auto-free --effort "${EFFORT}"

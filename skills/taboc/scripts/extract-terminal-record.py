@@ -8,13 +8,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--log", required=True)
     parser.add_argument("--worker", required=True)
-    parser.add_argument("--profile", choices=["readonly", "simple"], required=True)
     options = parser.parse_args()
-    prefixes = [f"[DECISION] {options.worker} |"]
-    if options.profile == "readonly":
-        prefixes.insert(0, f"[HANDOFF] {options.worker} →")
-    else:
-        prefixes.insert(0, f"[DONE] {options.worker} |")
+    prefixes = [f"[HANDOFF] {options.worker} →", f"[DECISION] {options.worker} |"]
     found = ""
     with Path(options.log).open(encoding="utf-8", errors="replace") as stream:
         for raw in stream:

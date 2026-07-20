@@ -19,21 +19,21 @@
       "id": 2,
       "name": "handoff-via-blackboard",
       "prompt": "用 tabb 组队处理支付重构：先摸清支付链路的现状，摸清之后把发现交接给下游 agent 做重构。仓库 /Users/me/shop，分支 dev。",
-      "expected_output": "先派 scout 只读摸链路，scout 把结论以 [HANDOFF] 写进 journal.md（带 file:line），下游 impl agent 轮询到交接就接着做重构；agent 间交接走黑板而非主 agent 中转。",
+      "expected_output": "先派 scout 只读摸链路，scout 把结论以 [HANDOFF] 写进 journal.md（带 file:line）；主 agent 只把该终态当作放行信号，下游 impl 自行读 journal 获取内容，不由主 agent 转述结论。",
       "files": []
     },
     {
       "id": 3,
       "name": "journal-completion-with-return-fallback",
       "prompt": "用 tabb 并行修 4 个小 bug。之前经常出现子 agent 把 [DONE] 写进 .tabb/journal.md 后就 idle，主 agent 因为没收到最终回报而反复催报或错误地重新派单。请设计这次的派单协议和回报循环。",
-      "expected_output": "把 [DONE]+[SEAL]（实现任务）或 [HANDOFF]（纯只读交接任务）作为黑板上的权威完成信号；派单协议明确 return 是子 agent 的最后一条 assistant 回复并要求以 【RETURN】 开头；主 agent 看到 journal 完工记录后继续推进，不把缺少最终回报当成未完成、不重复 spawn；补发前检查并在 journal 追加一次性的 [RETURN_REQUESTED] 记账，后续轮询不重复催报。",
+      "expected_output": "把 [DONE]+[SEAL]（实现任务）或 [HANDOFF]（纯只读任务）作为黑板上的权威完成信号；worker 最终回复只是摘要。主 agent 看到 journal 终态后立即继续推进，不催报、不重复 spawn，也不引入第二套完成门禁。",
       "files": []
     },
     {
       "id": 4,
       "name": "completed-idle-does-not-respawn",
       "prompt": "用 tabb 处理一个实现任务。子 agent 已写入 [DONE] 和 [SEAL]、释放文件锁，但没有发 【RETURN】；接下来连续 3 个回报周期仍然 idle。请说明主 agent 的处置。",
-      "expected_output": "任务已经完成，主 agent 继续推进/收口；检查是否已写 [RETURN_REQUESTED]，未写才补发一次并记账。即使连续 3 个周期 idle，也不能 spawn 接替或把任务报成未完成，因为 [DONE]+[SEAL] 已齐全。",
+      "expected_output": "任务已经完成，主 agent 直接继续推进/收口。即使连续 3 个周期 idle，也不催报、不 spawn 接替、不把任务报成未完成，因为 journal 中 [DONE]+[SEAL] 已齐全。",
       "files": []
     },
     {

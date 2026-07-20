@@ -124,7 +124,7 @@ ln -s "$PWD/skills/large-file-write" ~/.claude/skills/large-file-write
 
 **选型第一判据是文件冲突协调的频度，不是任务数量。** 黑板不是免费的（轮询延迟、需清道夫兜死锁），只有"主 agent 成了文件协调瓶颈"这个痛点真实且高频时才值得上 tabb，否则 ta 更省心。
 
-`tabb` 会为每项任务登记并展示实际模型与 effort。默认继承当前主 agent 的模型与 effort；只读任务仍继承当前主模型，但 effort 固定为 low。tabb 不跨模型路由，也不使用 OpenCode。
+`tabb` 会为每项任务登记并展示实际模型与 effort。所有任务继承当前主模型；写入任务继承主 effort，只读默认 medium，只有机械检索/事实收集才降到 low。tabb 不跨模型路由，也不使用 OpenCode。
 
 两者都把 subagent 当执行体（侦察 / 实现 / 验证 / git 收口全部派出去），主 agent 不自己写代码。含角色编制、派单 prompt 要素、里程碑进度条、决策上抛、定期回报循环、异常处理手册。
 

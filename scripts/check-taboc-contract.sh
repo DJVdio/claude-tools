@@ -1,71 +1,62 @@
 #!/usr/bin/env bash
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "${0}")/.."
 
+SKILL="skills/taboc/SKILL.md"
 FAIL=0
-ok() { printf '  ✅ %s\n' "$1"; }
-bad() { printf '  ❌ %s\n' "$1"; FAIL=1; }
+ok()  { printf '  ✅ %s\n' "${1}"; }
+bad() { printf '  ❌ %s\n' "${1}"; FAIL=1; }
+need() {
+  grep -Fq "${1}" "${SKILL}" && ok "${2}" || bad "${2}"
+}
 
-echo "══ taboc 独立性 ══"
-if rg -n '\.tabb|skills/(ta|tabb)/|~/.+(ta|tabb)' skills/taboc; then
-  bad "taboc 仍引用其他编排 skill 的路径或状态"
+echo "══ taboc 独立性与核心契约 ══"
+BYTES="$(wc -c < "${SKILL}" | tr -d ' ')"
+LINES="$(wc -l < "${SKILL}" | tr -d ' ')"
+[ "${BYTES}" -le 10000 ] && ok "SKILL.md ${BYTES} bytes ≤ 10000" || bad "SKILL.md 过大：${BYTES} bytes"
+[ "${LINES}" -le 140 ] && ok "SKILL.md ${LINES} lines ≤ 140" || bad "SKILL.md 过长：${LINES} lines"
+
+need '仅在用户显式调用 `/taboc`' "只手动触发"
+need '不读取其他 skill' "独立运行"
+need 'OpenCode **只执行纯只读任务**' "OpenCode 只读边界"
+need '路由只认下表五档' "固定五档路由"
+need '文件多、耗时长、测试慢只是拆单信号' "规模不触发 Sol"
+need '选 Sol 必须' "Sol 升档有理由"
+need '额度期 Luna `low`' "额度期 Luna-low"
+need '目标模型等于当前主模型' "支持父模型继承"
+need '禁止换模型' "禁止静默替换"
+need '【taboc premium 协议】' "premium worker 协议自包含"
+need 'seal-from-journal.sh --dry-run' "收口预检"
+need '[references/failures.md](references/failures.md)' "异常手册按需加载"
+
+if rg -q '\.tabb|skills/(ta|tabb)/|~/.+(ta|tabb)' skills/taboc; then
+  bad "taboc 仍引用其他编排 skill"
 else
-  ok "taboc 不读取其他编排 skill"
+  ok "taboc 无其他编排 skill 依赖"
 fi
+if grep -REq -- '--profile|profile=simple|simple_protocol|TABOC_MAX_ATTEMPTS' skills/taboc/scripts; then
+  bad "OpenCode 运行时仍含已删除的写入 profile/重试分支"
+else
+  ok "OpenCode 运行时仅保留只读路径"
+fi
+grep -Fq '"*":"deny"' skills/taboc/scripts/opencode-worker.sh \
+  && grep -Fq '".taboc/journal.md":"allow"' skills/taboc/scripts/opencode-worker.sh \
+  && ok "OpenCode 权限默认拒绝，仅放行读与 journal" || bad "OpenCode 只读权限不完整"
+grep -q 'launchctl bootstrap' skills/taboc/scripts/launch-opencode.sh && ok "launchd 一次性托管" || bad "缺 launchd 启动"
+grep -q 'model-query.lock' skills/taboc/scripts/opencode-worker.sh && ok "模型查询有并发锁" || bad "模型查询无并发锁"
+grep -q -- '--idle-timeout' skills/taboc/scripts/opencode-worker.sh \
+  && grep -q -- '--hard-timeout' skills/taboc/scripts/opencode-worker.sh \
+  && ok "同时有 idle/hard timeout" || bad "超时门禁不完整"
+grep -q '\[POOL_QUOTA\].*no free-model fallback' skills/taboc/scripts/opencode-worker.sh \
+  && ok "限额后不试其他免费模型" || bad "限额可能继续回退"
 
-for FILE in skills/taboc/seal.sh skills/taboc/seal-from-journal.sh skills/taboc/scripts/opencode-worker.sh skills/taboc/scripts/launch-opencode.sh skills/taboc/scripts/status-opencode.sh skills/taboc/scripts/register-assignment.sh skills/taboc/scripts/task-panel.sh; do
-  if [ -f "${FILE}" ]; then
-    bash -n "${FILE}" && ok "${FILE} 语法通过" || bad "${FILE} 语法错误"
-  else
-    bad "缺少 ${FILE}"
-  fi
+for FILE in skills/taboc/*.sh skills/taboc/scripts/*.sh; do
+  [ -f "${FILE}" ] && { bash -n "${FILE}" && ok "${FILE} 语法通过" || bad "${FILE} 语法错误"; }
 done
-
-echo "══ taboc 路由与权限门禁 ══"
-rg -q '路由只认固定五档' skills/taboc/SKILL.md && ok "只认固定五档" || bad "仍允许自由选择模型"
-rg -q 'DeepSeek V4 Flash Free.*medium' skills/taboc/SKILL.md && ok "只读优先 DeepSeek-medium" || bad "只读路由错误"
-rg -q 'gpt-5.6-luna / low' skills/taboc/SKILL.md && ok "额度期只读 Luna-low" || bad "额度 fallback 错误"
-rg -q 'gpt-5.6-luna / medium' skills/taboc/SKILL.md && ok "简单任务 Luna-medium" || bad "简单任务路由错误"
-rg -q 'gpt-5.6-luna / max' skills/taboc/SKILL.md && ok "短复杂 Luna-max" || bad "短复杂路由错误"
-rg -q 'gpt-5.6-sol / medium' skills/taboc/SKILL.md && ok "长复杂 Sol-medium" || bad "长复杂路由错误"
-rg -q 'gpt-5.6-sol / high' skills/taboc/SKILL.md && ok "非常复杂 Sol-high" || bad "非常复杂路由错误"
-rg -Fq 'ROUTES = {' skills/taboc/scripts/route-task.py && ok "固定路由由脚本生成" || bad "缺少确定性路由脚本"
-rg -q 'awk.*print; exit' skills/taboc/scripts/opencode-worker.sh && ok "显式模型只取一个，不形成回退链" || bad "可能继续遍历其他免费模型"
-rg -q 'rm -rf \*.*deny' skills/taboc/scripts/opencode-worker.sh && ok "实现 worker 禁递归删除" || bad "缺少递归删除门禁"
-rg -q 'launchctl bootstrap' skills/taboc/scripts/launch-opencode.sh && ok "worker 由 launchd 托管" || bad "缺少脱离工具进程组的启动机制"
-rg -q '"KeepAlive": False' skills/taboc/scripts/write-launch-plist.py && ok "launchd worker 为一次性任务" || bad "worker 可能被 launchd 无限重启"
-rg -q '/opt/homebrew/bin/opencode' skills/taboc/scripts/launch-opencode.sh && ok "主动探测 Homebrew OpenCode" || bad "仍只依赖 PATH"
-rg -q '\[POOL_BLOCKED\].*do not upgrade' skills/taboc/scripts/launch-opencode.sh && ok "环境故障禁止批量升级" || bad "缺少执行池阻塞门禁"
-rg -q 'event.get\("type"\) == "error"' skills/taboc/scripts/classify-opencode-log.py && ok "只解析结构化错误事件" || bad "可能把任务文本误判为限额"
-rg -q 'Task \| Agent \| Pool \| Model \| Effort \| State' skills/taboc/scripts/task-panel.py && ok "任务面板显示模型与努力程度" || bad "任务面板缺少调度详情"
-rg -q 'route-task.py --class' skills/taboc/SKILL.md && ok "派发强制运行固定路由" || bad "固定路由未接入流程"
-rg -q '手写 assignments 绕过脚本' skills/taboc/SKILL.md && ok "禁止伪造登记" || bad "可绕过登记"
-rg -q '\[POOL_QUOTA\].*no free-model fallback' skills/taboc/scripts/opencode-worker.sh && ok "额度触发 Luna-low 且不试其他免费模型" || bad "DeepSeek 限额 fallback 错误"
-rg -q 'quota-state.py.*check' skills/taboc/scripts/launch-opencode.sh && ok "launcher 阻止额度期内新任务" || bad "额度期内可能继续启动 OpenCode"
-rg -q 'OpenCode Pool.*QUOTA_INFO' skills/taboc/scripts/task-panel.sh && ok "任务面板显示额度解除时间" || bad "额度熔断状态不可见"
-if rg -q 'run-with-timeout.py' skills/taboc/scripts/opencode-worker.sh \
-  && rg -q -- '--idle-timeout' skills/taboc/scripts/opencode-worker.sh \
-  && rg -q -- '--hard-timeout' skills/taboc/scripts/opencode-worker.sh; then
-  ok "单模型调用有活动感知超时与总时长上限"
-else
-  bad "模型可能误杀活跃任务或无限卡住 worker"
-fi
-rg -q 'startup.lock' skills/taboc/scripts/opencode-worker.sh && ok "OpenCode 冷启动有并发保护" || bad "并发冷启动可能争用 SQLite"
-rg -q 'model-query.lock' skills/taboc/scripts/opencode-worker.sh && ok "模型目录查询有并发保护" || bad "并发模型查询可能争用 SQLite"
-rg -q 'readonly:high.*450' skills/taboc/scripts/opencode-worker.sh \
-  && rg -q 'simple:high.*600' skills/taboc/scripts/opencode-worker.sh \
-  && ok "超时默认值按任务复杂度分级" || bad "所有任务可能再次共用固定超时"
-rg -q 'extract-terminal-record.py' skills/taboc/scripts/opencode-worker.sh && ok "最终 JSON 终态可安全恢复" || bad "模型完成但 journal 可能缺终态"
-rg -q 'TABOC_ATTEMPT_TIMEOUT TABOC_ATTEMPT_HARD_TIMEOUT TABOC_STARTUP_HOLD' skills/taboc/scripts/launch-opencode.sh && ok "LaunchAgent 透传运行策略" || bad "launcher 丢失模型或超时配置"
-rg -q 'run_lock.exists' skills/taboc/scripts/task-panel.py && ok "任务面板校验 worker 活性" || bad "任务面板可能永久显示陈旧 running"
-rg -q 'write-worker-prompt.py' skills/taboc/SKILL.md && ok "完整 worker 协议由脚本生成" || bad "主 agent 可能现编 worker 协议"
-rg -q '仅在.*非正常终态' skills/taboc/references/failures.md && ok "异常手册按需加载" || bad "异常细则可能常驻上下文"
-
-for FILE in skills/taboc/scripts/classify-opencode-log.py skills/taboc/scripts/quota-state.py skills/taboc/scripts/route-task.py skills/taboc/scripts/task-panel.py skills/taboc/scripts/write-launch-plist.py skills/taboc/scripts/run-with-timeout.py skills/taboc/scripts/extract-terminal-record.py skills/taboc/scripts/write-worker-prompt.py; do
+for FILE in skills/taboc/scripts/*.py; do
   python3 -c 'import pathlib,sys; compile(pathlib.Path(sys.argv[1]).read_text(), sys.argv[1], "exec")' "${FILE}" \
     && ok "${FILE} 语法通过" || bad "${FILE} 语法错误"
 done
-
 bash skills/taboc/tests/test-opencode-worker.sh || FAIL=1
 
 [ "${FAIL}" = 0 ] && echo "✅ taboc 契约通过" || echo "❌ taboc 契约失败"

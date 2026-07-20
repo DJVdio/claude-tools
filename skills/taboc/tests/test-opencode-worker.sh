@@ -32,42 +32,32 @@ route() {
 [ "$(route complex-long)" = $'premium\tgpt-5.6-sol\tmedium' ]
 [ "$(route very-complex)" = $'premium\tgpt-5.6-sol\thigh' ]
 
-grep -Fq '规模只决定拆单，不决定模型' "${SKILL_DIR}/SKILL.md"
-grep -Fq 'Sol 必须有具体理由' "${SKILL_DIR}/SKILL.md"
-grep -Fq '父模型继承' "${SKILL_DIR}/SKILL.md"
-grep -Fq '省略 `model`' "${SKILL_DIR}/SKILL.md"
-grep -Fq 'spawn 成功后才把 board 改为 `doing`' "${SKILL_DIR}/SKILL.md"
-grep -Fq '禁止改传 Sol/Terra' "${SKILL_DIR}/SKILL.md"
-if grep -Fq '并显式传同一 model/effort' "${SKILL_DIR}/SKILL.md"; then
-  echo "skill still requires an unsupported explicit model override" >&2
-  exit 1
-fi
-if grep -Eq '^\| `complex-long` \|.*(30 分钟|4 个以上业务文件)' "${SKILL_DIR}/SKILL.md"; then
-  echo "complex-long unexpectedly uses task size as a routing signal" >&2
-  exit 1
-fi
+grep -Fq '文件多、耗时长、测试慢只是拆单信号' "${SKILL_DIR}/SKILL.md"
+grep -Fq '选 Sol 必须' "${SKILL_DIR}/SKILL.md"
+grep -Fq '目标模型等于当前主模型' "${SKILL_DIR}/SKILL.md"
+grep -Fq 'spawn 成功后才标 `doing`' "${SKILL_DIR}/SKILL.md"
+grep -Fq '禁止换模型' "${SKILL_DIR}/SKILL.md"
 
-# Prompt generator carries the complete profile-specific protocol without loading it into SKILL.md.
+# Prompt generator carries the complete readonly protocol without loading it into SKILL.md.
 python3 "${SKILL_DIR}/scripts/write-worker-prompt.py" \
   --output "${TEST_ROOT}/readonly.prompt" --repo "${REPO}" --branch main \
-  --id prompt-readonly --profile readonly --task 'inspect auth' --validation 'rg auth'
+  --id prompt-readonly --task 'inspect auth' --validation 'rg auth'
 grep -Fq '[HANDOFF] prompt-readonly →' "${TEST_ROOT}/readonly.prompt"
 if grep -Eq '^  \[SEAL\]' "${TEST_ROOT}/readonly.prompt"; then
   echo "readonly prompt unexpectedly contains a SEAL output record" >&2
   exit 1
 fi
-python3 "${SKILL_DIR}/scripts/write-worker-prompt.py" \
+if python3 "${SKILL_DIR}/scripts/write-worker-prompt.py" \
   --output "${TEST_ROOT}/simple.prompt" --repo "${REPO}" --branch main \
-  --id prompt-simple --profile simple --task 'fix typo' --validation 'npm test -- typo'
-grep -Fq 'mkdir "${L}"' "${TEST_ROOT}/simple.prompt"
-grep -Fq '[DONE] prompt-simple |' "${TEST_ROOT}/simple.prompt"
-grep -Fq "[SEAL] ${REPO} |" "${TEST_ROOT}/simple.prompt"
-
+  --id prompt-simple --profile simple --task 'fix typo' >/dev/null 2>&1; then
+  echo "OpenCode prompt generator unexpectedly accepts a write profile" >&2
+  exit 1
+fi
 touch "${REPO}/.taboc/mock-deepseek-fail"
 
 set +e
 bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
-  --repo "${REPO}" --id scout-one --profile readonly --effort xhigh \
+  --repo "${REPO}" --id scout-one --effort xhigh \
   --prompt-file "${TEST_ROOT}/prompt.txt"
 [ "$?" -eq 75 ] || { echo "quota worker did not stop the pool" >&2; exit 1; }
 set -e
@@ -95,7 +85,7 @@ rm "${TABOC_QUOTA_STATE}"
 
 # Empty/failed model discovery still tries the known DeepSeek name once.
 TABOC_MOCK_MODELS_EMPTY=1 bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
-  --repo "${REPO}" --id scout-discovery --profile readonly --effort medium \
+  --repo "${REPO}" --id scout-discovery --effort medium \
   --prompt-file "${TEST_ROOT}/prompt.txt"
 grep -Fq 'done|opencode/deepseek-v4-flash-free|default|1' "${REPO}/.taboc/opencode/scout-discovery.status"
 
@@ -105,7 +95,7 @@ set +e
 TABOC_ATTEMPT_TIMEOUT=1 TABOC_ATTEMPT_HARD_TIMEOUT=5 TABOC_STARTUP_HOLD=0 \
 TABOC_MODELS='opencode/deepseek-v4-flash-free,opencode/nemotron-3-ultra-free' \
   bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
-    --repo "${REPO}" --id scout-timeout --profile readonly --effort high \
+    --repo "${REPO}" --id scout-timeout --effort high \
     --prompt-file "${TEST_ROOT}/prompt.txt"
 [ "$?" -eq 75 ] || { echo "timed out DeepSeek did not stop without fallback" >&2; exit 1; }
 set -e
@@ -116,9 +106,9 @@ grep -Fq 'TabocAttemptIdleTimeout' "${REPO}/.taboc/opencode/attempts/scout-timeo
 # Productive output resets the idle timer, so an active task can exceed the old wall-clock limit.
 touch "${REPO}/.taboc/mock-active-long"
 TABOC_ATTEMPT_TIMEOUT=1 TABOC_ATTEMPT_HARD_TIMEOUT=5 TABOC_STARTUP_HOLD=0 \
-TABOC_MODELS='opencode/deepseek-v4-flash-free' TABOC_MAX_ATTEMPTS=1 \
+TABOC_MODELS='opencode/deepseek-v4-flash-free' \
   bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
-    --repo "${REPO}" --id scout-active --profile readonly --effort high \
+    --repo "${REPO}" --id scout-active --effort high \
     --prompt-file "${TEST_ROOT}/prompt.txt"
 rm "${REPO}/.taboc/mock-active-long"
 grep -Fq 'done|opencode/deepseek-v4-flash-free|high|1' "${REPO}/.taboc/opencode/scout-active.status"
@@ -133,7 +123,7 @@ set +e
 TABOC_ATTEMPT_TIMEOUT=5 TABOC_ATTEMPT_HARD_TIMEOUT=1 TABOC_STARTUP_HOLD=0 \
 TABOC_MODELS='opencode/deepseek-v4-flash-free,opencode/nemotron-3-ultra-free' \
   bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
-    --repo "${REPO}" --id scout-hard-timeout --profile readonly --effort high \
+    --repo "${REPO}" --id scout-hard-timeout --effort high \
     --prompt-file "${TEST_ROOT}/prompt.txt"
 [ "$?" -eq 75 ] || { echo "hard-timed-out DeepSeek did not stop without fallback" >&2; exit 1; }
 set -e
@@ -144,7 +134,7 @@ grep -Fq 'exhausted|opencode/deepseek-v4-flash-free|high|1' "${REPO}/.taboc/open
 # Exact terminal records printed only in final JSON are safely materialized into journal.
 touch "${REPO}/.taboc/mock-output-only"
 bash "${SKILL_DIR}/scripts/opencode-worker.sh" \
-  --repo "${REPO}" --id scout-output --profile readonly --effort medium \
+  --repo "${REPO}" --id scout-output --effort medium \
   --prompt-file "${TEST_ROOT}/prompt.txt"
 rm "${REPO}/.taboc/mock-output-only"
 grep -Fq '[HANDOFF] scout-output → root | recovered from final output' "${REPO}/.taboc/journal.md"
@@ -154,12 +144,12 @@ grep -Fq 'done|opencode/deepseek-v4-flash-free|medium|1' "${REPO}/.taboc/opencod
 TABOC_MOCK_DB_LOCK_DIR="${REPO}/.taboc/mock-db-lock" \
 TABOC_MOCK_RUN_DB_LOCK_DIR="${REPO}/.taboc/mock-run-db-lock" TABOC_STARTUP_HOLD=0.3 \
   bash "${SKILL_DIR}/scripts/opencode-worker.sh" --repo "${REPO}" --id concurrent-a \
-    --profile readonly --effort medium --prompt-file "${TEST_ROOT}/prompt.txt" &
+    --effort medium --prompt-file "${TEST_ROOT}/prompt.txt" &
 CONCURRENT_A=$!
 TABOC_MOCK_DB_LOCK_DIR="${REPO}/.taboc/mock-db-lock" \
 TABOC_MOCK_RUN_DB_LOCK_DIR="${REPO}/.taboc/mock-run-db-lock" TABOC_STARTUP_HOLD=0.3 \
   bash "${SKILL_DIR}/scripts/opencode-worker.sh" --repo "${REPO}" --id concurrent-b \
-    --profile readonly --effort medium --prompt-file "${TEST_ROOT}/prompt.txt" &
+    --effort medium --prompt-file "${TEST_ROOT}/prompt.txt" &
 CONCURRENT_B=$!
 wait "${CONCURRENT_A}"
 wait "${CONCURRENT_B}"
@@ -169,7 +159,7 @@ grep -Fq 'done|' "${REPO}/.taboc/opencode/concurrent-b.status"
 touch "${REPO}/.taboc/mock-sleep"
 bash "${SKILL_DIR}/scripts/launch-opencode.sh" --check | grep -Fq "ready|${MOCK_BIN}/opencode|"
 bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
-  --repo "${REPO}" --id scout-two --profile readonly --effort medium \
+  --repo "${REPO}" --id scout-two --effort medium \
   --prompt-file "${TEST_ROOT}/prompt.txt" >/dev/null
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   PID="$(cat "${REPO}/.taboc/opencode/scout-two.pid" 2>/dev/null || true)"
@@ -191,17 +181,17 @@ sleep 1.2
 
 # LaunchAgent receives the single model and timeout overrides from the launcher environment.
 rm "${REPO}/.taboc/mock-sleep"
-TABOC_MODELS=opencode/deepseek-v4-flash-free TABOC_MAX_ATTEMPTS=1 \
+TABOC_MODELS=opencode/deepseek-v4-flash-free \
 TABOC_ATTEMPT_TIMEOUT=7 TABOC_ATTEMPT_HARD_TIMEOUT=11 TABOC_STARTUP_HOLD=0 \
   bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
-    --repo "${REPO}" --id scout-env --profile readonly --effort medium \
+    --repo "${REPO}" --id scout-env --effort medium \
     --prompt-file "${TEST_ROOT}/prompt.txt" >/dev/null
 for _ in $(seq 1 30); do
   grep -Fq 'done|opencode/deepseek-v4-flash-free|medium|1' "${REPO}/.taboc/opencode/scout-env.status" 2>/dev/null && break
   sleep 0.1
 done
 grep -Fq 'done|opencode/deepseek-v4-flash-free|medium|1' "${REPO}/.taboc/opencode/scout-env.status"
-grep -Fq '|opencode/deepseek-v4-flash-free|1|7|11' "${REPO}/.taboc/mock-calls.log"
+grep -Fq '|opencode/deepseek-v4-flash-free|7|11' "${REPO}/.taboc/mock-calls.log"
 
 # A task body mentioning quota-like words is not an OpenCode error event.
 printf '%s\n' '{"type":"text","text":"402 429 quota Capacity overload credit"}' > "${TEST_ROOT}/clean.jsonl"
@@ -232,7 +222,7 @@ printf '%s\n' "${PANEL}" | grep -Fq '| stale-worker | stale-worker | opencode | 
 
 # A terminal journal record prevents accidental duplicate launches.
 if bash "${SKILL_DIR}/scripts/launch-opencode.sh" \
-  --repo "${REPO}" --id scout-two --profile readonly --effort medium \
+  --repo "${REPO}" --id scout-two --effort medium \
   --prompt-file "${TEST_ROOT}/prompt.txt" >/dev/null 2>&1; then
   echo "duplicate launch unexpectedly succeeded" >&2
   exit 1
